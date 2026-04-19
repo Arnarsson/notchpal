@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 extension Color {
     init(hex: UInt, opacity: Double = 1) {
@@ -19,6 +20,7 @@ final class AgentStatus: Identifiable {
     var label: String
     var state: State = .idle
     var progress: Double?
+    var justCompleted = false
 
     enum State: String {
         case idle, busy, attention, error, done
@@ -119,6 +121,12 @@ final class AgentRegistry {
     func pushNotification(agent: String, message: String, state: AgentStatus.State = .done) {
         let notif = HUDNotification(agent: agent, message: message, state: state)
         notifications.append(notif)
+        // Subtle system sound
+        if state == .attention || state == .error {
+            NSSound(named: .init("Basso"))?.play()
+        } else {
+            NSSound(named: .init("Pop"))?.play()
+        }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
             notifications.removeAll { $0.id == notif.id }
@@ -172,7 +180,14 @@ final class AgentRegistry {
                             agent.state = .done
                             agent.label = "Complete"
                             agent.progress = nil
+                            agent.justCompleted = true
                             pushNotification(agent: agent.agent, message: "Finished")
+                            // Clear flash after 1s
+                            let a = agent
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .seconds(1))
+                                a.justCompleted = false
+                            }
                             continue
                         }
                     }

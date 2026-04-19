@@ -103,25 +103,43 @@ struct NotchRootView: View {
         HStack(spacing: 4) {
             Spacer()
             ZStack {
+                // Progress ring when agents are working
+                if registry.workingCount > 0, let avgProgress = averageProgress {
+                    Circle()
+                        .stroke(Hekla.orange.opacity(0.15), lineWidth: 1.5)
+                        .frame(width: 12, height: 12)
+                    Circle()
+                        .trim(from: 0, to: avgProgress)
+                        .stroke(Hekla.orange, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                        .frame(width: 12, height: 12)
+                        .rotationEffect(.degrees(-90))
+                }
+
                 Circle()
                     .fill(registry.summaryState.color)
                     .opacity(registry.summaryState == .idle ? 0 : 1)
-                    .frame(width: 6, height: 6)
+                    .frame(width: 5, height: 5)
                     .shadow(color: registry.summaryState.color.opacity(0.5), radius: 3)
 
                 // Attention count badge
                 if registry.needsYouCount > 0 {
                     Text("\(registry.needsYouCount)")
-                        .font(.system(size: 7, weight: .heavy))
+                        .font(.system(size: 6, weight: .heavy))
                         .foregroundStyle(.black)
-                        .frame(width: 12, height: 12)
+                        .frame(width: 10, height: 10)
                         .background(Hekla.yellow, in: Circle())
-                        .offset(x: 8, y: -4)
+                        .offset(x: 8, y: -5)
                 }
             }
             .padding(.trailing, 10)
         }
         .padding(.top, 8)
+    }
+
+    private var averageProgress: Double? {
+        let progressAgents = registry.agents.compactMap { $0.progress }
+        guard !progressAgents.isEmpty else { return nil }
+        return progressAgents.reduce(0, +) / Double(progressAgents.count)
     }
 
     // MARK: - List (main view)
@@ -484,11 +502,12 @@ struct AgentCard: View {
         .padding(.vertical, compact ? 6 : 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Hekla.card)
+                .fill(status.justCompleted ? Hekla.green.opacity(0.15) : Hekla.card)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(Hekla.cardHi.opacity(0.4), lineWidth: 0.5)
+                        .stroke(status.justCompleted ? Hekla.green.opacity(0.4) : Hekla.cardHi.opacity(0.4), lineWidth: 0.5)
                 )
+                .animation(.easeInOut(duration: 0.3), value: status.justCompleted)
         )
         .contentShape(Rectangle())
     }
