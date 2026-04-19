@@ -16,7 +16,7 @@ enum NotchGeometry {
     /// passive agents pair up in 2-col grid (~40pt per row).
     /// Fixed expanded size — one size for all content. SwiftUI ScrollView
     /// handles overflow. No dynamic resizing (causes NSHostingView constraint crashes).
-    static let expandedSize = CGSize(width: 560, height: 420)
+    static let expandedSize = CGSize(width: 560, height: 500)
 
     static func frame(for state: NotchState, on screen: NSScreen) -> NSRect {
         switch state {

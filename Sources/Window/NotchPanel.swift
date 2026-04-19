@@ -68,7 +68,11 @@ final class StableHostingWrapper: NSView {
         hostingView?.frame = bounds
     }
 
-    // Prevent constraint system from engaging on this wrapper
+    // Pass scroll events through to the hosting view
+    override func scrollWheel(with event: NSEvent) {
+        hostingView?.scrollWheel(with: event)
+    }
+
     override class var requiresConstraintBasedLayout: Bool { false }
     override func updateConstraints() { super.updateConstraints() }
 }
