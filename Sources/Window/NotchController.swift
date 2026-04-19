@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 
 @Observable
 final class NotchController {
@@ -12,6 +13,7 @@ final class NotchController {
     }
 
     var lastDroppedFile: URL?
+    var showDropSuggestions = false
 
     var selectedAgent: AgentStatus? {
         didSet { resizeForContent() }
@@ -19,6 +21,7 @@ final class NotchController {
 
     private var panel: NotchPanel?
     private var animating = false
+    private var hotkeyRef: EventHotKeyRef?
 
     // MARK: - Lifecycle
 
@@ -34,11 +37,14 @@ final class NotchController {
         panel.setFrame(NotchGeometry.frame(for: .collapsed, on: screen), display: false)
         panel.orderFrontRegardless()
         self.panel = panel
+
+        registerHotkey()
     }
 
     func hide() {
         panel?.orderOut(nil)
         panel = nil
+        unregisterHotkey()
     }
 
     // MARK: - Intents
@@ -50,7 +56,18 @@ final class NotchController {
     func hoverEnded() {
         guard !animating else { return }
         selectedAgent = nil
+        showDropSuggestions = false
         state = .collapsed
+    }
+
+    func toggle() {
+        if state == .expanded {
+            selectedAgent = nil
+            showDropSuggestions = false
+            state = .collapsed
+        } else {
+            state = .expanded
+        }
     }
 
     func selectAgent(_ agent: AgentStatus) {
@@ -63,7 +80,50 @@ final class NotchController {
 
     func didReceiveDrop(_ url: URL) {
         lastDroppedFile = url
+        showDropSuggestions = true
+        AgentRegistry.shared.suggestForDrop(url)
         state = .expanded
+        resizeForContent()
+    }
+
+    func dismissDropSuggestions() {
+        showDropSuggestions = false
+        AgentRegistry.shared.clearDropSuggestions()
+        resizeForContent()
+    }
+
+    // MARK: - Global hotkey (⌘Space)
+
+    private func registerHotkey() {
+        var hotKeyID = EventHotKeyID()
+        hotKeyID.signature = OSType(0x4E504C)  // "NPL"
+        hotKeyID.id = 1
+
+        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        let handler: EventHandlerUPP = { _, event, _ -> OSStatus in
+            Task { @MainActor in
+                NotchController.hotkeyFired()
+            }
+            return noErr
+        }
+        InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, nil)
+
+        // ⌘Space = kVK_Space + cmdKey
+        RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
+    }
+
+    private func unregisterHotkey() {
+        if let ref = hotkeyRef {
+            UnregisterEventHotKey(ref)
+            hotkeyRef = nil
+        }
+    }
+
+    private static func hotkeyFired() {
+        // Find the controller through the app delegate
+        guard let delegate = NSApp.delegate as? AppDelegate,
+              let controller = delegate.notchController else { return }
+        controller.toggle()
     }
 
     // MARK: - Dynamic sizing
@@ -75,6 +135,8 @@ final class NotchController {
         let size: CGSize
         if let agent = selectedAgent {
             size = NotchGeometry.detailSize(for: agent.id)
+        } else if showDropSuggestions {
+            size = CGSize(width: 560, height: 180)
         } else {
             let registry = AgentRegistry.shared
             let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }.count
@@ -100,11 +162,15 @@ final class NotchController {
 
         let target: NSRect
         if state == .expanded {
-            let registry = AgentRegistry.shared
-            let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }.count
-            let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }.count
-            let size = NotchGeometry.listSize(activeCount: active, passiveCount: passive)
-            target = NotchGeometry.frame(size: size, on: screen)
+            if showDropSuggestions {
+                target = NotchGeometry.frame(size: CGSize(width: 560, height: 180), on: screen)
+            } else {
+                let registry = AgentRegistry.shared
+                let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }.count
+                let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }.count
+                let size = NotchGeometry.listSize(activeCount: active, passiveCount: passive)
+                target = NotchGeometry.frame(size: size, on: screen)
+            }
         } else {
             target = NotchGeometry.frame(for: .collapsed, on: screen)
         }

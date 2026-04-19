@@ -136,11 +136,20 @@ struct TelegramDetailContent: View {
                 msgBubble("me", "yeah looking at it now", "11:14")
             }
 
-            // Approval buttons
+            // Approval buttons — wired to real actions
             HStack(spacing: 6) {
-                approvalBtn("Reject", Hekla.dim)
-                approvalBtn("Edit", Hekla.cardHi)
-                approvalBtn("Send", Hekla.orange)
+                Button { AgentRegistry.shared.approveAgent(id: "telegram", action: "reject") } label: {
+                    approvalBtn("Reject", Hekla.dim)
+                }
+                .buttonStyle(.plain)
+                Button { AgentRegistry.shared.approveAgent(id: "telegram", action: "edit") } label: {
+                    approvalBtn("Edit", Hekla.cardHi)
+                }
+                .buttonStyle(.plain)
+                Button { AgentRegistry.shared.approveAgent(id: "telegram", action: "send") } label: {
+                    approvalBtn("Send", Hekla.orange)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 4)
         }

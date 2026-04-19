@@ -40,6 +40,9 @@ struct NotchRootView: View {
                     if let agent = controller.selectedAgent {
                         AgentDetailView(agent: agent, onBack: { controller.deselectAgent() })
                             .transition(.move(edge: .trailing).combined(with: .opacity))
+                    } else if controller.showDropSuggestions, let url = controller.lastDroppedFile {
+                        dropSuggestionsContent(url)
+                            .transition(.scale(scale: 0.9).combined(with: .opacity))
                     } else {
                         listContent
                             .transition(.opacity.combined(with: .offset(y: -4)))
@@ -94,14 +97,26 @@ struct NotchRootView: View {
     // MARK: - Collapsed
 
     private var collapsedContent: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Spacer()
-            Circle()
-                .fill(registry.summaryState.color)
-                .opacity(registry.summaryState == .idle ? 0 : 1)
-                .frame(width: 6, height: 6)
-                .shadow(color: registry.summaryState.color.opacity(0.5), radius: 3)
-                .padding(.trailing, 10)
+            ZStack {
+                Circle()
+                    .fill(registry.summaryState.color)
+                    .opacity(registry.summaryState == .idle ? 0 : 1)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: registry.summaryState.color.opacity(0.5), radius: 3)
+
+                // Attention count badge
+                if registry.needsYouCount > 0 {
+                    Text("\(registry.needsYouCount)")
+                        .font(.system(size: 7, weight: .heavy))
+                        .foregroundStyle(.black)
+                        .frame(width: 12, height: 12)
+                        .background(Hekla.yellow, in: Circle())
+                        .offset(x: 8, y: -4)
+                }
+            }
+            .padding(.trailing, 10)
         }
         .padding(.top, 8)
     }
@@ -166,13 +181,6 @@ struct NotchRootView: View {
                     }
                 }
 
-                if let drop = controller.lastDroppedFile {
-                    DropCard(url: drop)
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.5).combined(with: .opacity),
-                            removal: .opacity
-                        ))
-                }
             }
             .padding(.horizontal, 12)
             .scaleEffect(dropTargeted ? 0.97 : 1.0)
@@ -183,6 +191,72 @@ struct NotchRootView: View {
             bottomBar
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
+        }
+    }
+
+    // MARK: - Drop suggestions
+
+    private func dropSuggestionsContent(_ url: URL) -> some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 38)
+
+            HStack(spacing: 8) {
+                Image(systemName: "doc.fill").font(.system(size: 11)).foregroundStyle(Hekla.orange)
+                Text(url.lastPathComponent)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Hekla.cream)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button {
+                    controller.dismissDropSuggestions()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Hekla.dim)
+                        .frame(width: 16, height: 16)
+                        .background(Hekla.cardHi, in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+
+            HStack(spacing: 6) {
+                ForEach(registry.dropSuggestions) { suggestion in
+                    Button {
+                        AgentRegistry.shared.pushNotification(
+                            agent: suggestion.agentName,
+                            message: "\(suggestion.action): \(url.lastPathComponent)",
+                            state: .busy
+                        )
+                        controller.dismissDropSuggestions()
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: suggestion.icon)
+                                .font(.system(size: 14))
+                                .foregroundStyle(Hekla.orange)
+                            Text(suggestion.action)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Hekla.cream)
+                            Text(suggestion.agentName)
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundStyle(Hekla.dim)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Hekla.card)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Hekla.cardHi.opacity(0.4), lineWidth: 0.5))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+
+            Spacer(minLength: 0)
         }
     }
 

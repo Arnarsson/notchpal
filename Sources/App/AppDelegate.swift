@@ -2,8 +2,10 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var controller: NotchController?
+    private(set) var controller: NotchController?
     private var statusItem: NSStatusItem?
+
+    var notchController: NotchController? { controller }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Accessory = no Dock icon, no menu bar takeover. Spike is a HUD only.

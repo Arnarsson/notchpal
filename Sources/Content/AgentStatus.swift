@@ -12,23 +12,17 @@ extension Color {
     }
 }
 
-/// Represents a single agent's status in the notch UI.
 @Observable
 final class AgentStatus: Identifiable {
     let id: String
     var agent: String
     var label: String
     var state: State = .idle
-    var progress: Double?  // 0..1 for working agents
+    var progress: Double?
 
     enum State: String {
-        case idle
-        case busy
-        case attention
-        case error
-        case done
+        case idle, busy, attention, error, done
 
-        /// HEKLA palette: orange for working, yellow for attention, green for done, dim for idle.
         var color: Color {
             switch self {
             case .idle: Color(hex: 0x807A72)
@@ -59,7 +53,6 @@ final class AgentStatus: Identifiable {
     }
 }
 
-/// A transient notification that drops from the notch.
 @Observable
 final class HUDNotification: Identifiable {
     let id = UUID()
@@ -74,13 +67,23 @@ final class HUDNotification: Identifiable {
     }
 }
 
-/// Registry of all agent statuses. The single source of truth for the notch content.
+/// Suggestion for what to do with a dropped file.
+struct DropSuggestion: Identifiable {
+    let id = UUID()
+    let agentId: String
+    let agentName: String
+    let action: String
+    let icon: String
+}
+
 @Observable
 final class AgentRegistry {
     static let shared = AgentRegistry()
 
     private(set) var agents: [AgentStatus] = []
     var notifications: [HUDNotification] = []
+    var dropSuggestions: [DropSuggestion] = []
+    private var progressTimer: Task<Void, Never>?
 
     var summaryState: AgentStatus.State {
         if agents.contains(where: { $0.state == .error }) { return .error }
@@ -116,10 +119,56 @@ final class AgentRegistry {
     func pushNotification(agent: String, message: String, state: AgentStatus.State = .done) {
         let notif = HUDNotification(agent: agent, message: message, state: state)
         notifications.append(notif)
-        // Auto-dismiss after 3 seconds
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
             notifications.removeAll { $0.id == notif.id }
+        }
+    }
+
+    /// Generate file drop suggestions based on active agents.
+    func suggestForDrop(_ url: URL) {
+        dropSuggestions = [
+            DropSuggestion(agentId: "chat", agentName: "Chat", action: "Summarize", icon: "text.magnifyingglass"),
+            DropSuggestion(agentId: "memory", agentName: "Memory", action: "Index", icon: "brain"),
+            DropSuggestion(agentId: "meeting", agentName: "Meeting Prep", action: "Attach", icon: "paperclip"),
+        ]
+    }
+
+    func clearDropSuggestions() {
+        dropSuggestions = []
+    }
+
+    /// Approve/dismiss a Telegram draft (or any attention agent).
+    func approveAgent(id: String, action: String) {
+        guard let agent = agent(id: id) else { return }
+        let name = agent.agent
+        agent.state = .done
+        agent.label = action == "send" ? "Reply sent" : "Draft rejected"
+        pushNotification(
+            agent: name,
+            message: action == "send" ? "Reply sent to Peder K." : "Draft discarded",
+            state: action == "send" ? .done : .idle
+        )
+    }
+
+    /// Start live progress ticking for working agents.
+    func startProgressSimulation() {
+        progressTimer?.cancel()
+        progressTimer = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                for agent in agents where agent.state == .busy {
+                    if let p = agent.progress, p < 1.0 {
+                        agent.progress = min(p + Double.random(in: 0.01...0.04), 1.0)
+                        if agent.progress! >= 1.0 {
+                            agent.state = .done
+                            agent.label = "Complete"
+                            agent.progress = nil
+                            pushNotification(agent: agent.agent, message: "Finished")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -166,6 +215,8 @@ final class AgentRegistry {
         let log = r.addAgent(id: "log", name: "Log")
         log.label = "47 today · last action 2m ago"
         log.state = .done
+
+        r.startProgressSimulation()
     }
 
     @objc static func debugPushNotification() {
