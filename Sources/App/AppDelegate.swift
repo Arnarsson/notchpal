@@ -18,6 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller = NotchController()
         controller?.show()
 
+        // Connect to Eureka/OpenClaw API
+        EurekaBridge.shared.startPolling(interval: 5)
+
         installQuitOnlyStatusItem()
     }
 

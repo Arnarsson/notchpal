@@ -13,6 +13,7 @@
 		48DB77DD235D3F5669363B39 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3634230B449CBAC773B382C2 /* SmokeTests.swift */; };
 		4A5BA6552D69964763FE3AA5 /* HoverTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1C767C90E2E3C307886524 /* HoverTracker.swift */; };
 		4EF0FB99C54C958C7453EB1D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679ADDD6FD318C4E4A59DBDF /* AppDelegate.swift */; };
+		51D9AB28BC977D41797DA8E9 /* EurekaBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F9BF53D33AC2E04CB371A0 /* EurekaBridge.swift */; };
 		61F0220D5CB94B71BFBE0ED0 /* NotchGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F211593C3B75CE4BD4B57C0 /* NotchGeometry.swift */; };
 		A5B7339FF5DB23FA990FDE61 /* NotchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B69374B3E46DEF0559C5C6 /* NotchController.swift */; };
 		C81238B97341FE7D78585A03 /* ScreenShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952C3C8C5C3F149CE3142F5E /* ScreenShareManager.swift */; };
@@ -36,6 +37,7 @@
 		209D2DCACCE068D1627E3804 /* NotchPal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotchPal.entitlements; sourceTree = "<group>"; };
 		22EF304F749C6C29333B11E5 /* NotchPal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotchPal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3634230B449CBAC773B382C2 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
+		38F9BF53D33AC2E04CB371A0 /* EurekaBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EurekaBridge.swift; sourceTree = "<group>"; };
 		431E1AB602D04A738B086C18 /* NotchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchRootView.swift; sourceTree = "<group>"; };
 		65B1A7A4AE6F1781A4EC68B3 /* NotchPalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPalApp.swift; sourceTree = "<group>"; };
 		679ADDD6FD318C4E4A59DBDF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -64,6 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				83AC37A7D1999D8487EAF854 /* DragReceiver.swift */,
+				38F9BF53D33AC2E04CB371A0 /* EurekaBridge.swift */,
 				EB1C767C90E2E3C307886524 /* HoverTracker.swift */,
 				952C3C8C5C3F149CE3142F5E /* ScreenShareManager.swift */,
 			);
@@ -212,6 +215,7 @@
 				1D01B76E0FEA61B0B8BE7E2F /* AgentStatus.swift in Sources */,
 				4EF0FB99C54C958C7453EB1D /* AppDelegate.swift in Sources */,
 				D94495642FC68846E64FC7DD /* DragReceiver.swift in Sources */,
+				51D9AB28BC977D41797DA8E9 /* EurekaBridge.swift in Sources */,
 				CAA06084774326EC12151801 /* HeklaStatusView.swift in Sources */,
 				4A5BA6552D69964763FE3AA5 /* HoverTracker.swift in Sources */,
 				A5B7339FF5DB23FA990FDE61 /* NotchController.swift in Sources */,

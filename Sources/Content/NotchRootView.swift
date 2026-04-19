@@ -409,18 +409,37 @@ struct NotchRootView: View {
         guard !askText.isEmpty else { return }
         let question = askText
         askText = ""
-        // Simulate a response
-        let responses = [
-            "Thursday 18:40 out, back Sunday. Hotel still unbooked.",
-            "Acme renewal at 14:30. §4 is the sticking point — they want 2× ACV cap.",
-            "326 items in the embedding queue. Should clear in ~4 minutes.",
-            "Last email from Peder was at 09:14 about Thursday dinner.",
-            "3 meetings today. The Acme one at 14:30 is the one that matters.",
-        ]
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            askResponse = responses[abs(question.hashValue) % responses.count]
+
+        let bridge = EurekaBridge.shared
+        if bridge.isConnected {
+            // Real API call
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                askResponse = "Thinking…"
+            }
+            Task {
+                if let response = await bridge.sendCommand(question) {
+                    await MainActor.run {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            askResponse = response
+                        }
+                    }
+                } else {
+                    await MainActor.run {
+                        withAnimation { askResponse = "No response from Eureka." }
+                    }
+                }
+                AgentRegistry.shared.pushNotification(agent: "Eureka", message: "Answered: \(question)", state: .done)
+            }
+        } else {
+            // Offline fallback
+            let responses = [
+                "Eureka is offline. Connect to 100.83.83.58 to use real commands.",
+                "Can't reach the API. Is the Linux box running?",
+            ]
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                askResponse = responses[abs(question.hashValue) % responses.count]
+            }
         }
-        AgentRegistry.shared.pushNotification(agent: "Chat", message: "Answered: \(question)", state: .done)
     }
 
     // MARK: - Shared
@@ -444,14 +463,16 @@ struct NotchRootView: View {
         }
     }
 
+    @Bindable private var bridge = EurekaBridge.shared
+
     private var bottomBar: some View {
         HStack(spacing: 0) {
-            Text("Autonomy")
+            Text("EUREKA")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .foregroundStyle(Hekla.dim)
                 .kerning(0.5)
-            Circle().fill(Hekla.green).frame(width: 4, height: 4).padding(.leading, 4)
-            Text("  Guardrails")
+            Circle().fill(bridge.isConnected ? Hekla.green : Color(hex: 0xFF5F57)).frame(width: 4, height: 4).padding(.leading, 4)
+            Text(bridge.isConnected ? "  Connected" : "  Offline")
                 .font(.system(size: 8, design: .monospaced))
                 .foregroundStyle(Hekla.dim)
             Spacer()
