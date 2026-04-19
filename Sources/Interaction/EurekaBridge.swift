@@ -7,7 +7,8 @@ import AppKit
 final class EurekaBridge {
     static let shared = EurekaBridge()
 
-    var baseURL = "http://100.83.83.58:8000"
+    // SSH tunnel: localhost:8888 → 100.83.83.58:8000
+    var baseURL = "http://127.0.0.1:8888"
     var isConnected = false
     var lastPoll: Date?
     var error: String?
@@ -63,10 +64,12 @@ final class EurekaBridge {
             consecutiveFailures = 0
             isConnected = true
 
+            await pollEurekaStatus()
             await pollDashboard()
             await pollTasks()
             await pollDecisions()
             await pollComms()
+            await pollCalendar()
             lastPoll = Date()
         } else {
             consecutiveFailures += 1
@@ -121,6 +124,33 @@ final class EurekaBridge {
         } else {
             infra.state = .done
             infra.label = "Reachable"
+        }
+    }
+
+    // MARK: - Eureka Workers
+
+    private func pollEurekaStatus() async {
+        guard let url = URL(string: "\(baseURL)/api/eureka/status"),
+              let data = await fetch(url: url) else { return }
+
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let registry = AgentRegistry.shared
+            let eureka = registry.agent(id: "eureka") ?? registry.addAgent(id: "eureka", name: "Eureka", icon: "bolt.fill")
+
+            let online = json["online"] as? Bool ?? false
+            let model = json["model"] as? String ?? "unknown"
+            let workers = json["activeWorkers"] as? [[String: Any]] ?? []
+
+            if !workers.isEmpty {
+                eureka.state = .busy
+                eureka.label = "\(workers.count) active · \(model)"
+            } else if online {
+                eureka.state = .idle
+                eureka.label = "Online · \(model)"
+            } else {
+                eureka.state = .error
+                eureka.label = "Offline"
+            }
         }
     }
 
@@ -214,14 +244,44 @@ final class EurekaBridge {
         }
     }
 
+    // MARK: - Calendar
+
+    private func pollCalendar() async {
+        guard let url = URL(string: "\(baseURL)/api/calendar/events/upcoming"),
+              let data = await fetch(url: url) else { return }
+
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let events = json["events"] as? [[String: Any]] {
+            let registry = AgentRegistry.shared
+            let cal = registry.agent(id: "calendar") ?? registry.addAgent(id: "calendar", name: "Calendar", icon: "calendar")
+
+            if events.isEmpty {
+                cal.state = .idle
+                cal.label = "No upcoming events"
+            } else {
+                let next = events.first?["summary"] as? String ?? "Event"
+                cal.state = .done
+                cal.label = "\(events.count) upcoming · Next: \(next)"
+            }
+        }
+    }
+
     // MARK: - Command (Ask)
 
     func sendCommand(_ message: String) async -> String? {
-        guard let url = resolver.url(for: .command, baseURL: baseURL) else { return nil }
+        // Try resolved command endpoint, fall back to /api/catchup/quick
+        let url: URL
+        if let resolved = resolver.url(for: .command, baseURL: baseURL) {
+            url = resolved
+        } else if let fallback = URL(string: "\(baseURL)/api/catchup/quick") {
+            url = fallback
+        } else {
+            return nil
+        }
         var request = URLRequest(url: url)
-        request.httpMethod = resolver.method(for: .command)
+        request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["message": message])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["topic": message, "message": message])
 
         do {
             let (data, _) = try await session.data(for: request)

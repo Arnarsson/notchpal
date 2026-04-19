@@ -37,8 +37,7 @@ final class EndpointResolver {
 
     /// Fetch /openapi.json and build the endpoint map.
     func discover(baseURL: String) async {
-        // Try /openapi.json first, then /docs/openapi.json, then /api/openapi.json
-        let candidates = ["/openapi.json", "/docs/openapi.json", "/api/openapi.json"]
+        let candidates = ["/openapi.json", "/docs/openapi.json", "/api/openapi.json", "/openapi"]
 
         for candidate in candidates {
             guard let url = URL(string: "\(baseURL)\(candidate)") else { continue }
@@ -142,19 +141,19 @@ final class EndpointResolver {
                 keywords = ["health"]
                 preferMethod = "GET"
             case .dashboard:
-                keywords = ["dashboard", "stats"]
+                keywords = ["dashboard", "activity/summary", "stats"]
                 preferMethod = "GET"
             case .tasks:
-                keywords = ["tasks", "issues"]
+                keywords = ["tasks", "issues", "daily3"]
                 preferMethod = "GET"
             case .decisions:
-                keywords = ["decisions"]
+                keywords = ["decisions", "suggestions"]
                 preferMethod = "GET"
             case .command:
-                keywords = ["command"]
+                keywords = ["command", "catchup", "spawn"]
                 preferMethod = "POST"
             case .comms:
-                keywords = ["communications", "unified_inbox", "inbox", "comms"]
+                keywords = ["communications", "unified_inbox", "inbox", "comms", "email/messages", "focus-inbox"]
                 preferMethod = "GET"
             }
 
