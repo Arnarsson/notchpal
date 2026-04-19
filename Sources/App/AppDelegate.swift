@@ -18,10 +18,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller = NotchController()
         controller?.show()
 
-        // Load all agents (demo + real)
-        AgentRegistry.debugAddDemo()
+        // Only add screen share (local feature) — everything else comes from Eureka
+        let r = AgentRegistry.shared
+        r.agents.removeAll()
+        let screen = r.addAgent(id: "screenshare", name: "Screen Share", icon: "rectangle.inset.filled.and.person.filled")
+        screen.label = "Not sharing"
+        screen.state = .idle
 
-        // Connect to Eureka/OpenClaw API — adds infrastructure agents on top
+        // Connect to real Eureka API
         EurekaBridge.shared.startPolling(interval: 5)
 
         installQuitOnlyStatusItem()

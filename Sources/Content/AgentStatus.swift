@@ -84,7 +84,7 @@ struct DropSuggestion: Identifiable {
 final class AgentRegistry {
     static let shared = AgentRegistry()
 
-    private(set) var agents: [AgentStatus] = []
+    var agents: [AgentStatus] = []
     var notifications: [HUDNotification] = []
     var notificationHistory: [HUDNotification] = []  // persistent history
     var dropSuggestions: [DropSuggestion] = []
