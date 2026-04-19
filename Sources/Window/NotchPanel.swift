@@ -28,8 +28,11 @@ final class NotchPanel: NSPanel {
         becomesKeyOnlyIfNeeded = true
         worksWhenModal = true
 
-        // The crucial bit: sit above fullscreen apps.
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)))
+        // statusBar level (25) + .fullScreenAuxiliary collection behavior
+        // keeps the panel above fullscreen apps AND allows drag-and-drop.
+        // NotchNook uses the same approach. screenSaverWindow (1000) blocks
+        // inter-app drag routing and is unnecessarily high.
+        level = .statusBar
 
         collectionBehavior = [
             .canJoinAllSpaces,
@@ -39,9 +42,9 @@ final class NotchPanel: NSPanel {
         ]
     }
 
-    // Non-activating panels must explicitly opt out of becoming key/main
-    // to guarantee no focus theft. `.nonactivatingPanel` mostly covers this,
-    // but we belt-and-braces it here.
-    override var canBecomeKey: Bool { false }
+    // canBecomeKey must be true for WindowServer to route inter-app drag
+    // sessions to this window. Focus theft is still prevented by the
+    // .nonactivatingPanel style mask, which stops the panel from activating.
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }

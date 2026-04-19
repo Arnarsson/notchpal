@@ -8,6 +8,8 @@ struct NotchRootView: View {
     @Bindable var controller: NotchController
     @Bindable private var status = AgentStatus.shared
 
+    @State private var dropTargeted = false
+
     var body: some View {
         ZStack {
             // The notch "body": black, rounded only at the bottom.
@@ -32,8 +34,22 @@ struct NotchRootView: View {
                 controller.hoverEnded()
             }
         }
-        .receiveDroppedFile { url in
-            controller.didReceiveDrop(url)
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            // Expand when drag enters, so user sees the drop surface
+            if !providers.isEmpty { controller.hoverBegan() }
+            guard let provider = providers.first else { return false }
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url else { return }
+                Task { @MainActor in
+                    controller.didReceiveDrop(url)
+                }
+            }
+            return true
+        }
+        .onChange(of: dropTargeted) { _, targeted in
+            if targeted {
+                controller.hoverBegan()
+            }
         }
         .animation(reduceMotion ? .easeOut(duration: 0.1)
                                 : .spring(response: 0.4, dampingFraction: 0.75),

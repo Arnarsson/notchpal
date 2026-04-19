@@ -34,4 +34,23 @@ final class AgentStatus {
     }
 
     private init() {}
+
+    /// LLDB helper — `@Observable` macro mangles type metadata so LLDB can't
+    /// resolve `AgentStatus` directly. Call these instead:
+    ///   expr -l Swift -- debugSetStatus("Arkivar indexing 342 files", "busy")
+    @objc static func debugSet(label: String, state: String) {
+        shared.label = label
+        switch state {
+        case "busy": shared.state = .busy
+        case "attention": shared.state = .attention
+        case "error": shared.state = .error
+        default: shared.state = .idle
+        }
+    }
+}
+
+/// Top-level function callable from LLDB without needing to resolve @Observable types.
+///   expr -l Swift -- debugSetStatus("Arkivar indexing 342 files", "busy")
+func debugSetStatus(_ label: String, _ state: String) {
+    AgentStatus.debugSet(label: label, state: state)
 }

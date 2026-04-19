@@ -6,11 +6,15 @@ enum NotchGeometry {
 
     /// Collapsed size: matches the physical notch when present, otherwise a synthetic handle.
     /// The notch on 14"/16" M-series MacBooks is ~200pt wide x 32pt tall in points.
+    /// Extra height below the physical notch so the collapsed panel has a hittable
+    /// surface for drag-and-drop. The notch itself is behind the display cutout.
+    private static let collapsedPadding: CGFloat = 12
+
     static func collapsedSize(for screen: NSScreen) -> CGSize {
         if let notch = physicalNotchRect(in: screen) {
-            return CGSize(width: notch.width, height: notch.height)
+            return CGSize(width: notch.width, height: notch.height + collapsedPadding)
         }
-        return CGSize(width: 180, height: 32) // synthetic handle for non-notch Macs
+        return CGSize(width: 180, height: 32 + collapsedPadding)
     }
 
     /// Expanded size used during spike. Fixed for now; later read from preferences.

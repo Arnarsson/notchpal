@@ -34,7 +34,6 @@ final class NotchController {
         hosting.translatesAutoresizingMaskIntoConstraints = false
         panel.contentView = hosting
 
-        // Initial frame at collapsed state.
         panel.setFrame(NotchGeometry.frame(for: .collapsed, on: screen), display: false)
         panel.orderFrontRegardless()
         self.panel = panel

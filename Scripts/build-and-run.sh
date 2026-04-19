@@ -27,4 +27,6 @@ xcodebuild \
   build
 
 pkill -x NotchPal 2>/dev/null || true
-open "$DERIVED/Build/Products/Debug/NotchPal.app"
+# Wait for the old process to fully exit so Launch Services doesn't choke (-600).
+while pgrep -x NotchPal >/dev/null 2>&1; do sleep 0.2; done
+"$DERIVED/Build/Products/Debug/NotchPal.app/Contents/MacOS/NotchPal" &
