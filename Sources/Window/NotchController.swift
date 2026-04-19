@@ -32,7 +32,10 @@ final class NotchController {
 
         let panel = NotchPanel()
         let hosting = NSHostingView(rootView: NotchRootView(controller: self))
-        hosting.translatesAutoresizingMaskIntoConstraints = false
+        // Use autoresizing masks, NOT constraints. NSHostingView + constraints
+        // causes EXC_BREAKPOINT in _postWindowNeedsUpdateConstraints.
+        hosting.translatesAutoresizingMaskIntoConstraints = true
+        hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
 
         panel.setFrame(NotchGeometry.frame(for: .collapsed, on: screen), display: false)
