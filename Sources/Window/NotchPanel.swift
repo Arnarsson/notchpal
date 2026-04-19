@@ -48,31 +48,27 @@ final class NotchPanel: NSPanel {
     // .nonactivatingPanel style mask, which stops the panel from activating.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
-}
 
-/// Wrapper view that hosts SwiftUI content without using constraints.
-/// Prevents the _postWindowNeedsUpdateConstraints crash by keeping the
-/// hosting view as a subview with manual frame management.
-final class StableHostingWrapper: NSView {
-    private var hostingView: NSView?
+    /// Replace _postWindowNeedsUpdateConstraints with a no-op on NotchPanel only.
+    /// This prevents EXC_BREAKPOINT when NSHostingView triggers constraint updates.
+    private static let installGuard: Void = {
+        let sel = NSSelectorFromString("_postWindowNeedsUpdateConstraints")
+        let block: @convention(block) (AnyObject) -> Void = { _ in }
+        let imp = imp_implementationWithBlock(block)
+        // Add to subclass first; if superclass already has it, this creates an override
+        if !class_addMethod(NotchPanel.self, sel, imp, "v@:") {
+            // Already inherited — replace just for this subclass
+            class_replaceMethod(NotchPanel.self, sel, imp, "v@:")
+        }
+    }()
 
-    func embed<V: View>(_ rootView: V) {
-        let hosting = NSHostingView(rootView: rootView)
-        hosting.autoresizingMask = [.width, .height]
-        addSubview(hosting)
-        hostingView = hosting
+    override init(
+        contentRect: NSRect,
+        styleMask: NSWindow.StyleMask,
+        backing: NSWindow.BackingStoreType,
+        defer flag: Bool
+    ) {
+        _ = Self.installGuard
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
     }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        hostingView?.frame = bounds
-    }
-
-    // Don't intercept scroll — let it pass through to subviews naturally
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        hostingView?.hitTest(convert(point, to: hostingView))
-    }
-
-    override class var requiresConstraintBasedLayout: Bool { false }
-    override func updateConstraints() { super.updateConstraints() }
 }

@@ -31,9 +31,8 @@ final class NotchController {
         guard let screen = NSScreen.main else { return }
 
         let panel = NotchPanel()
-        let wrapper = StableHostingWrapper()
-        wrapper.embed(NotchRootView(controller: self))
-        panel.contentView = wrapper
+        let hosting = NSHostingView(rootView: NotchRootView(controller: self))
+        panel.contentView = hosting
 
         panel.setFrame(NotchGeometry.frame(for: .collapsed, on: screen), display: false)
         panel.orderFrontRegardless()
