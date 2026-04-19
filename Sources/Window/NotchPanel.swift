@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// The floating panel that hosts the notch UI.
 ///
@@ -47,4 +48,27 @@ final class NotchPanel: NSPanel {
     // .nonactivatingPanel style mask, which stops the panel from activating.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+}
+
+/// Wrapper view that hosts SwiftUI content without using constraints.
+/// Prevents the _postWindowNeedsUpdateConstraints crash by keeping the
+/// hosting view as a subview with manual frame management.
+final class StableHostingWrapper: NSView {
+    private var hostingView: NSView?
+
+    func embed<V: View>(_ rootView: V) {
+        let hosting = NSHostingView(rootView: rootView)
+        hosting.autoresizingMask = [.width, .height]
+        addSubview(hosting)
+        hostingView = hosting
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        hostingView?.frame = bounds
+    }
+
+    // Prevent constraint system from engaging on this wrapper
+    override class var requiresConstraintBasedLayout: Bool { false }
+    override func updateConstraints() { super.updateConstraints() }
 }
