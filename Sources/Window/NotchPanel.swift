@@ -13,6 +13,7 @@ import SwiftUI
 final class NotchPanel: NSPanel {
 
     init() {
+        _ = Self.installGuard
         super.init(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -62,13 +63,4 @@ final class NotchPanel: NSPanel {
         }
     }()
 
-    override init(
-        contentRect: NSRect,
-        styleMask: NSWindow.StyleMask,
-        backing: NSWindow.BackingStoreType,
-        defer flag: Bool
-    ) {
-        _ = Self.installGuard
-        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
-    }
 }
