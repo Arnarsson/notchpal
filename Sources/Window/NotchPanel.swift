@@ -47,21 +47,33 @@ final class NotchPanel: NSPanel {
         guard !guardInstalled else { return }
         guardInstalled = true
 
-        let sel = NSSelectorFromString("_postWindowNeedsUpdateConstraints")
-        guard let originalMethod = class_getInstanceMethod(NSWindow.self, sel) else { return }
-        let originalImp = method_getImplementation(originalMethod)
+        // Guard all private methods that throw in borderless NSPanel + NSHostingView
+        let selectors = [
+            "_postWindowNeedsUpdateConstraints",
+            "_postWindowNeedsLayout",
+            "_postWindowNeedsValidation",
+            "_postWindowNeedsDisplay",
+        ]
 
-        typealias OriginalFunc = @convention(c) (AnyObject, Selector) -> Void
-        let originalCall = unsafeBitCast(originalImp, to: OriginalFunc.self)
+        for selName in selectors {
+            let sel = NSSelectorFromString(selName)
+            guard let originalMethod = class_getInstanceMethod(NSWindow.self, sel) else { continue }
+            let originalImp = method_getImplementation(originalMethod)
 
-        let block: @convention(block) (AnyObject) -> Void = { obj in
-            ObjCExceptionCatcher.catchException {
-                originalCall(obj, sel)
+            typealias OriginalFunc = @convention(c) (AnyObject, Selector) -> Void
+            let originalCall = unsafeBitCast(originalImp, to: OriginalFunc.self)
+            let capturedSel = sel
+
+            let block: @convention(block) (AnyObject) -> Void = { obj in
+                ObjCExceptionCatcher.catchException {
+                    originalCall(obj, capturedSel)
+                }
+            }
+
+            let newImp = imp_implementationWithBlock(block)
+            if !class_addMethod(NotchPanel.self, sel, newImp, "v@:") {
+                class_replaceMethod(NotchPanel.self, sel, newImp, "v@:")
             }
         }
-
-        let newImp = imp_implementationWithBlock(block)
-        class_addMethod(NotchPanel.self, sel, newImp, "v@:")
-            || { class_replaceMethod(NotchPanel.self, sel, newImp, "v@:"); return true }()
     }
 }
