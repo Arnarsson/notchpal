@@ -19,8 +19,8 @@ enum NotchGeometry {
         return CGSize(width: 180, height: 32 + collapsedPadding)
     }
 
-    /// Expanded size. Tall enough for 3 agent rows + a drop file row.
-    static let expandedSize = CGSize(width: 520, height: 200)
+    /// Expanded size. Wide and compact like NotchNook.
+    static let expandedSize = CGSize(width: 580, height: 140)
 
     /// Returns the frame (in screen coordinates) for the panel in its given state.
     static func frame(for state: NotchState, on screen: NSScreen) -> NSRect {

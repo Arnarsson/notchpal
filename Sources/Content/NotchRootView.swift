@@ -1,33 +1,43 @@
 import SwiftUI
 
-/// Top-level SwiftUI view inside the panel. Responsible for:
-/// - Rendering the black rounded-bottom notch shape.
-/// - Showing collapsed vs expanded content.
-/// - Wiring hover and drop events back to the controller.
 struct NotchRootView: View {
     @Bindable var controller: NotchController
     @Bindable private var registry = AgentRegistry.shared
 
     @State private var dropTargeted = false
+    @State private var dropFlash = false
+
+    private let cornerRadius: CGFloat = 22
 
     var body: some View {
         ZStack {
-            NotchShape(bottomCornerRadius: 12)
+            NotchShape(bottomCornerRadius: cornerRadius)
                 .fill(.black)
 
+            // Drop flash
+            if dropFlash {
+                NotchShape(bottomCornerRadius: cornerRadius)
+                    .fill(.blue.opacity(0.1))
+                    .transition(.opacity)
+            }
+
+            // Content
             Group {
                 switch controller.state {
                 case .collapsed:
                     collapsedContent
+                        .transition(.opacity)
                 case .expanded:
                     expandedContent
+                        .transition(.opacity.combined(with: .offset(y: -4)))
                 }
             }
 
-            // Drop zone visual feedback
+            // Drop targeting — cards breathe
             if dropTargeted {
-                NotchShape(bottomCornerRadius: 12)
-                    .strokeBorder(.white.opacity(0.3), lineWidth: 1.5)
+                NotchShape(bottomCornerRadius: cornerRadius)
+                    .fill(.blue.opacity(0.05))
+                    .transition(.opacity)
             }
         }
         .trackHover { hovering in
@@ -44,6 +54,7 @@ struct NotchRootView: View {
                 guard let url else { return }
                 Task { @MainActor in
                     controller.didReceiveDrop(url)
+                    triggerDropFlash()
                 }
             }
             return true
@@ -51,43 +62,55 @@ struct NotchRootView: View {
         .onChange(of: dropTargeted) { _, targeted in
             if targeted { controller.hoverBegan() }
         }
-        .animation(reduceMotion ? .easeOut(duration: 0.1)
-                                : .spring(response: 0.4, dampingFraction: 0.75),
-                   value: controller.state)
+        // No broad .animation modifier — transitions handle expand/collapse,
+        // and explicit withAnimation calls handle drop/targeting.
     }
 
-    // MARK: - Content
+    private func triggerDropFlash() {
+        withAnimation(.easeIn(duration: 0.1)) { dropFlash = true }
+        withAnimation(.easeOut(duration: 0.4).delay(0.1)) { dropFlash = false }
+    }
+
+    // MARK: - Collapsed
 
     private var collapsedContent: some View {
-        HStack {
+        HStack(spacing: 6) {
             Spacer()
             Circle()
-                .fill(registry.summaryState.color.opacity(registry.summaryState == .idle ? 0 : 0.9))
+                .fill(registry.summaryState.color)
+                .opacity(registry.summaryState == .idle ? 0 : 1)
                 .frame(width: 6, height: 6)
-                .padding(.trailing, 8)
+                .shadow(color: registry.summaryState.color.opacity(0.5), radius: 3)
+                .padding(.trailing, 10)
         }
+        .padding(.top, 8)
     }
+
+    // MARK: - Expanded
 
     private var expandedContent: some View {
         VStack(spacing: 0) {
-            HeklaStatusView(registry: registry)
+            Spacer().frame(height: 38)
 
-            if let drop = controller.lastDroppedFile {
-                Divider().overlay(.white.opacity(0.08))
-                HStack(spacing: 8) {
-                    Image(systemName: "doc.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.blue)
-                    Text(drop.lastPathComponent)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
+            HStack(spacing: 6) {
+                ForEach(registry.agents) { agent in
+                    AgentCard(status: agent)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+
+                if let drop = controller.lastDroppedFile {
+                    DropCard(url: drop)
+                        .transition(
+                            .asymmetric(
+                                insertion: .scale(scale: 0.5).combined(with: .opacity)
+                                    .combined(with: .offset(x: 20)),
+                                removal: .opacity
+                            )
+                        )
+                }
             }
+            .padding(.horizontal, 12)
+            .scaleEffect(dropTargeted ? 0.97 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: dropTargeted)
 
             Spacer(minLength: 0)
         }
@@ -98,7 +121,95 @@ struct NotchRootView: View {
     }
 }
 
-/// Notch-shaped rectangle: sharp top corners, rounded bottom corners.
+// MARK: - Cards
+
+struct AgentCard: View {
+    @Bindable var status: AgentStatus
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                if status.state != .idle {
+                    Circle()
+                        .fill(status.state.color.opacity(0.25))
+                        .frame(width: 14, height: 14)
+                        .blur(radius: 4)
+                }
+
+                Circle()
+                    .fill(status.state.color)
+                    .frame(width: 7, height: 7)
+            }
+            .frame(width: 16, height: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(status.agent)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+                Text(status.label)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if status.state == .attention {
+                Text("!")
+                    .font(.system(size: 8, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.black)
+                    .frame(width: 14, height: 14)
+                    .background(status.state.color, in: Circle())
+                    .transition(.scale.combined(with: .opacity))
+            } else if status.state == .error {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.white.opacity(0.07))
+        )
+    }
+}
+
+struct DropCard: View {
+    let url: URL
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.blue)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(url.lastPathComponent)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("Context")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.blue.opacity(0.1))
+        )
+    }
+}
+
+// MARK: - NotchShape
+
 struct NotchShape: Shape, InsettableShape {
     let bottomCornerRadius: CGFloat
     var inset: CGFloat = 0
