@@ -524,21 +524,22 @@ final class OpenClawBridge {
         agent.lastUpdated = Date()
     }
 
-    /// Send a message to Eureka via openclaw acp and get the reply.
+    /// Send a message to Eureka.
+    /// OpenClaw ACP requires interactive TTY — can't pipe non-interactively.
+    /// Until a REST chat endpoint exists, this creates a task in Eureka
+    /// and returns memory search results as context.
     func chat(_ text: String) async -> String? {
-        guard isAvailable else { return "Eureka offline" }
+        guard isAvailable else { return nil }
 
-        // Use openclaw acp to send a message and capture the response
-        // The acp client sends the message into the session and streams the reply
+        // Search Eureka's memory for relevant context
+        let searchResult = await EurekaBridge.shared.searchMemory(text)
+
+        // Also try to create a task so Eureka sees the message
         let escaped = text.replacingOccurrences(of: "'", with: "'\\''")
-        let cmd = "echo '\(escaped)' | \(clawPath) acp --session \(sessionKey) --pipe 2>/dev/null | head -100"
+        _ = await sshCommand("curl -s -X POST http://127.0.0.1:8000/api/captures/ -H 'Content-Type: application/json' -d '{\"text\":\"[NotchPal Ask] \(escaped)\",\"app_name\":\"NotchPal\",\"window_title\":\"Notch Ask\"}'", timeout: 5)
 
-        let result = await sshCommand(cmd, timeout: 30)
-        if let reply = result, !reply.isEmpty {
-            lastReply = reply
-            return reply
-        }
-        return "No response from Eureka"
+        lastReply = searchResult
+        return searchResult
     }
 
     private func sshCommand(_ command: String, timeout: Int = 5) async -> String? {
