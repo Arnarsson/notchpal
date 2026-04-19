@@ -6,9 +6,10 @@ enum NotchGeometry {
 
     static func collapsedSize(for screen: NSScreen) -> CGSize {
         if let notch = physicalNotchRect(in: screen) {
-            return CGSize(width: notch.width, height: notch.height + collapsedPadding)
+            // Wider than physical notch to fit flanking data points
+            return CGSize(width: notch.width + 120, height: notch.height + collapsedPadding)
         }
-        return CGSize(width: 180, height: 32 + collapsedPadding)
+        return CGSize(width: 300, height: 32 + collapsedPadding)
     }
 
     /// List view: sized to fit agents. Active agents get full rows (~46pt),

@@ -92,6 +92,10 @@ final class NotchController {
         selectedAgent = nil
     }
 
+    func resizePanel() {
+        resizeForContent()
+    }
+
     func didReceiveDrop(_ url: URL) {
         lastDroppedFile = url
         showDropSuggestions = true

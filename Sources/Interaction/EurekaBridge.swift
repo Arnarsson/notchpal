@@ -12,7 +12,14 @@ final class EurekaBridge {
     var lastPoll: Date?
     var error: String?
     var aiOnline = false
-    var chatEndpoint: String?  // discovered from OpenAPI
+    var chatEndpoint: String?
+
+    // Priority data for compact state
+    var priorityEmailCount = 0
+    var stuckIssueCount = 0
+    var nextEventName: String?
+    var nextEventTime: String?
+    var activeWorkerCount = 0
 
     private var pollTimer: Task<Void, Never>?
     private let session: URLSession
@@ -73,8 +80,10 @@ final class EurekaBridge {
 
         await pollEureka()
         await pollEmail()
+        await pollInboxTriage()
         await pollCalendar()
         await pollIssues()
+        await pollOpenLoops()
         await pollActivity()
         await pollInsights()
         await pollBridge()
@@ -103,6 +112,7 @@ final class EurekaBridge {
         let model = json["model"] as? String ?? "?"
         let workers = json["activeWorkers"] as? [[String: Any]] ?? []
 
+        activeWorkerCount = workers.count
         if !workers.isEmpty {
             agent.state = .busy
             agent.label = "\(workers.count) workers · \(model)"
@@ -134,6 +144,7 @@ final class EurekaBridge {
         let priorityUnread = priority?["unread"] as? Int ?? 0
         let totalUnread = categories.reduce(0) { $0 + (($1["unread"] as? Int) ?? 0) }
 
+        priorityEmailCount = priorityUnread
         agent.state = priorityUnread > 10 ? .attention : (totalUnread > 0 ? .busy : .idle)
         agent.label = "\(priorityUnread) priority · \(totalUnread) total unread"
     }
@@ -153,8 +164,13 @@ final class EurekaBridge {
         if events.isEmpty {
             agent.state = .idle
             agent.label = "No upcoming"
+            nextEventName = nil
+            nextEventTime = nil
         } else {
             let next = events.first?["summary"] as? String ?? "Event"
+            let start = (events.first?["start"] as? String ?? "").prefix(16)
+            nextEventName = next
+            nextEventTime = String(start.suffix(5)) // HH:MM
             agent.state = .done
             agent.label = "\(events.count) upcoming · \(next)"
         }
@@ -233,6 +249,68 @@ final class EurekaBridge {
             agent.state = .error
             agent.label = "No direct chat endpoint found"
         }
+    }
+
+    // MARK: - Inbox Triage
+
+    private func pollInboxTriage() async {
+        let ep = "/api/inbox/triage"
+        guard let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        let priority = json["priority"] as? [[String: Any]] ?? []
+        priorityEmailCount = max(priorityEmailCount, priority.count)
+    }
+
+    // MARK: - Open Loops
+
+    private func pollOpenLoops() async {
+        let ep = "/api/insights/patterns"
+        guard let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let patterns = json["patterns"] as? [[String: Any]] else { return }
+
+        let stuck = patterns.first { ($0["type"] as? String) == "stuck" }
+        let ids = stuck?["issue_ids"] as? [String] ?? []
+        stuckIssueCount = ids.count
+    }
+
+    // MARK: - Quick Actions
+
+    func syncEmail() async {
+        _ = await postAction("/api/email/sync")
+        AgentRegistry.shared.pushNotification(agent: "Email", message: "Sync triggered", state: .busy)
+    }
+
+    func morningBriefing() async -> String? {
+        guard let data = await fetch("/api/catchup/morning") else { return nil }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return json["briefing"] as? String ?? json["summary"] as? String
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func archiveNewsletters() async {
+        _ = await postAction("/api/inbox/archive-rest")
+        AgentRegistry.shared.pushNotification(agent: "Inbox", message: "Newsletters archived", state: .done)
+    }
+
+    func spawnWorker(task: String = "Check status and report") async {
+        guard let url = URL(string: "\(baseURL)/api/eureka/spawn") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["task": task])
+        _ = try? await session.data(for: request)
+        AgentRegistry.shared.pushNotification(agent: "Eureka", message: "Worker spawned", state: .busy)
+    }
+
+    private func postAction(_ path: String) async -> Data? {
+        guard let url = URL(string: "\(baseURL)\(path)") else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try? await session.data(for: request).0
     }
 
     // MARK: - Send command

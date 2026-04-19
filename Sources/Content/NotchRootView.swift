@@ -102,66 +102,92 @@ struct NotchRootView: View {
         withAnimation(.easeOut(duration: 0.4).delay(0.1)) { dropFlash = false }
     }
 
-    // MARK: - Collapsed
+    // MARK: - Compact State (flanking data points)
 
     private var collapsedContent: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
+            // Left: highest priority data point
+            compactLeft
+                .padding(.leading, 8)
+
             Spacer()
-            ZStack {
-                // Progress ring when agents are working
-                if registry.workingCount > 0, let avgProgress = averageProgress {
-                    Circle()
-                        .stroke(Hekla.orange.opacity(0.15), lineWidth: 1.5)
-                        .frame(width: 12, height: 12)
-                    Circle()
-                        .trim(from: 0, to: avgProgress)
-                        .stroke(Hekla.orange, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                        .frame(width: 12, height: 12)
-                        .rotationEffect(.degrees(-90))
-                }
 
-                Circle()
-                    .fill(registry.summaryState.color)
-                    .opacity(registry.summaryState == .idle ? 0 : 1)
-                    .frame(width: 5, height: 5)
-                    .shadow(color: registry.summaryState.color.opacity(0.5), radius: 3)
+            // Center dot
+            Circle()
+                .fill(registry.summaryState.color)
+                .opacity(registry.summaryState == .idle ? 0 : 1)
+                .frame(width: 5, height: 5)
+                .shadow(color: registry.summaryState.color.opacity(0.5), radius: 3)
 
-                // Attention count badge
-                if registry.needsYouCount > 0 {
-                    Text("\(registry.needsYouCount)")
-                        .font(.system(size: 6, weight: .heavy))
-                        .foregroundStyle(.black)
-                        .frame(width: 10, height: 10)
-                        .background(Hekla.yellow, in: Circle())
-                        .offset(x: 8, y: -5)
-                }
-            }
-            .padding(.trailing, 10)
+            Spacer()
+
+            // Right: second priority data point
+            compactRight
+                .padding(.trailing, 8)
         }
-        .padding(.top, 8)
+        .padding(.top, 6)
     }
 
-    private var averageProgress: Double? {
-        let progressAgents = registry.agents.compactMap { $0.progress }
-        guard !progressAgents.isEmpty else { return nil }
-        return progressAgents.reduce(0, +) / Double(progressAgents.count)
+    private var compactLeft: some View {
+        Group {
+            if bridge.activeWorkerCount > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: "bolt.fill").font(.system(size: 7)).foregroundStyle(Hekla.orange)
+                    Text("AI").font(.system(size: 8, weight: .semibold, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+            } else if bridge.priorityEmailCount > 0 {
+                HStack(spacing: 3) {
+                    Text("\(bridge.priorityEmailCount)").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(Hekla.orange)
+                    Image(systemName: "envelope.fill").font(.system(size: 7)).foregroundStyle(Hekla.dim)
+                }
+            } else if let event = bridge.nextEventName {
+                Text(String(event.prefix(8)))
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Hekla.dim)
+            } else {
+                EmptyView()
+            }
+        }
     }
 
-    // MARK: - List (main view)
+    private var compactRight: some View {
+        Group {
+            if bridge.stuckIssueCount > 0 {
+                HStack(spacing: 3) {
+                    Text("\(bridge.stuckIssueCount)").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(Hekla.yellow)
+                    Text("stuck").font(.system(size: 7, design: .monospaced)).foregroundStyle(Hekla.dim)
+                }
+            } else if let time = bridge.nextEventTime {
+                Text(time).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.dim)
+            } else if bridge.isConnected {
+                Circle().fill(Hekla.green).frame(width: 4, height: 4)
+            } else {
+                Circle().fill(Color(hex: 0xFF5F57)).frame(width: 4, height: 4)
+            }
+        }
+    }
+
+    @State private var showAllAgents = false
+
+    // MARK: - Expanded: Prioritized Feed
 
     private var listContent: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: 36)
 
-            // Header
-            HStack(alignment: .center) {
+            // Header: EUREKA + quick actions
+            HStack(spacing: 8) {
                 Text("EUREKA")
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Hekla.orange)
                     .kerning(2)
 
-                statusSummary
                 Spacer()
+
+                // Quick action icons
+                quickAction("bolt.fill") { Task { await bridge.spawnWorker() } }
+                quickAction("envelope.arrow.triangle.branch") { Task { await bridge.syncEmail() } }
+                quickAction("archivebox") { Task { await bridge.archiveNewsletters() } }
 
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -169,29 +195,16 @@ struct NotchRootView: View {
                         if !showAskInput { askText = ""; askResponse = nil }
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(showAskInput ? "×" : "+")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        Text("Ask")
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    }
-                    .foregroundStyle(Hekla.cream)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(showAskInput ? Hekla.orange.opacity(0.3) : Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
+                    Image(systemName: showAskInput ? "xmark" : "magnifyingglass")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Hekla.cream)
+                        .frame(width: 22, height: 22)
+                        .background(showAskInput ? Hekla.orange.opacity(0.3) : Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
                 }
                 .buttonStyle(.plain)
-
-                Text("⌘Space")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Hekla.dim)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Hekla.card, in: RoundedRectangle(cornerRadius: 4))
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Hekla.cardHi, lineWidth: 0.5))
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 6)
 
             // Inline ask
             if showAskInput {
@@ -201,41 +214,69 @@ struct NotchRootView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            // Smart stacking: active agents on top, idle/done below
-            let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }
-            let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }
-
-            VStack(spacing: 6) {
-                ForEach(active) { agent in
-                    let gi = registry.agents.firstIndex(where: { $0.id == agent.id }) ?? 0
-                    AgentCard(status: agent, compact: false, focused: controller.focusedIndex == gi)
+            // Prioritized cards — max 4, scored by importance
+            let scored = prioritizedAgents
+            VStack(spacing: 5) {
+                ForEach(scored.prefix(showAllAgents ? 20 : 4)) { agent in
+                    AgentCard(status: agent, compact: false, focused: false)
                         .onTapGesture { controller.selectAgent(agent) }
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
-
-                if !passive.isEmpty {
-                    let columns = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
-                    LazyVGrid(columns: columns, spacing: 6) {
-                        ForEach(passive) { agent in
-                            let gi = registry.agents.firstIndex(where: { $0.id == agent.id }) ?? 0
-                            AgentCard(status: agent, compact: true, focused: controller.focusedIndex == gi)
-                                .onTapGesture { controller.selectAgent(agent) }
-                                .transition(.move(edge: .trailing).combined(with: .opacity))
-                        }
-                    }
                 }
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: registry.agents.map(\.state))
             .padding(.horizontal, 12)
             .scaleEffect(dropTargeted ? 0.97 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: dropTargeted)
 
+            // See all / collapse toggle
+            if registry.agents.count > 4 {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        showAllAgents.toggle()
+                    }
+                    controller.resizePanel()
+                } label: {
+                    Text(showAllAgents ? "Show less" : "See all \(registry.agents.count) agents")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Hekla.dim)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+
             Spacer(minLength: 4)
 
             bottomBar
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
         }
+    }
+
+    /// Sort agents by priority score — attention > busy > others
+    private var prioritizedAgents: [AgentStatus] {
+        registry.agents.sorted { a, b in
+            priorityScore(a) > priorityScore(b)
+        }
+    }
+
+    private func priorityScore(_ agent: AgentStatus) -> Int {
+        switch agent.state {
+        case .error: return 100
+        case .attention: return 90
+        case .busy: return 70
+        case .done: return 30
+        case .idle: return 10
+        }
+    }
+
+    private func quickAction(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 9))
+                .foregroundStyle(Hekla.dim)
+                .frame(width: 22, height: 22)
+                .background(Hekla.card, in: RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Hekla.cardHi.opacity(0.4), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Drop suggestions
