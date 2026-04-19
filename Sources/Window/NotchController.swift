@@ -14,6 +14,8 @@ final class NotchController {
 
     var lastDroppedFile: URL?
     var showDropSuggestions = false
+    var showHistory = false
+    var focusedIndex: Int = -1  // -1 = no focus
 
     var selectedAgent: AgentStatus? {
         didSet { resizeForContent() }
@@ -22,6 +24,7 @@ final class NotchController {
     private var panel: NotchPanel?
     private var animating = false
     private var hotkeyRef: EventHotKeyRef?
+    private var keyMonitor: Any?
 
     // MARK: - Lifecycle
 
@@ -39,12 +42,14 @@ final class NotchController {
         self.panel = panel
 
         registerHotkey()
+        installKeyboardNav()
     }
 
     func hide() {
         panel?.orderOut(nil)
         panel = nil
         unregisterHotkey()
+        removeKeyboardNav()
     }
 
     // MARK: - Intents
@@ -57,6 +62,8 @@ final class NotchController {
         guard !animating else { return }
         selectedAgent = nil
         showDropSuggestions = false
+        showHistory = false
+        focusedIndex = -1
         state = .collapsed
     }
 
@@ -64,10 +71,17 @@ final class NotchController {
         if state == .expanded {
             selectedAgent = nil
             showDropSuggestions = false
+            showHistory = false
+            focusedIndex = -1
             state = .collapsed
         } else {
             state = .expanded
         }
+    }
+
+    func toggleHistory() {
+        showHistory.toggle()
+        resizeForContent()
     }
 
     func selectAgent(_ agent: AgentStatus) {
@@ -126,6 +140,50 @@ final class NotchController {
         controller.toggle()
     }
 
+    // MARK: - Keyboard navigation
+
+    private func installKeyboardNav() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.state == .expanded else { return event }
+            let agents = AgentRegistry.shared.agents
+            switch event.keyCode {
+            case 125: // down arrow
+                self.focusedIndex = min(self.focusedIndex + 1, agents.count - 1)
+                return nil
+            case 126: // up arrow
+                self.focusedIndex = max(self.focusedIndex - 1, -1)
+                return nil
+            case 36: // return/enter
+                if self.selectedAgent != nil {
+                    return event // already in detail, pass through
+                }
+                if self.focusedIndex >= 0, self.focusedIndex < agents.count {
+                    self.selectAgent(agents[self.focusedIndex])
+                }
+                return nil
+            case 53: // escape
+                if self.selectedAgent != nil {
+                    self.deselectAgent()
+                } else if self.showHistory {
+                    self.showHistory = false
+                    self.resizeForContent()
+                } else {
+                    self.toggle()
+                }
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func removeKeyboardNav() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+    }
+
     // MARK: - Dynamic sizing
 
     private func resizeForContent() {
@@ -135,6 +193,9 @@ final class NotchController {
         let size: CGSize
         if let agent = selectedAgent {
             size = NotchGeometry.detailSize(for: agent.id)
+        } else if showHistory {
+            let historyCount = min(AgentRegistry.shared.notificationHistory.count, 8)
+            size = CGSize(width: 560, height: CGFloat(80 + historyCount * 32))
         } else if showDropSuggestions {
             size = CGSize(width: 560, height: 180)
         } else {
@@ -162,7 +223,10 @@ final class NotchController {
 
         let target: NSRect
         if state == .expanded {
-            if showDropSuggestions {
+            if showHistory {
+                let hc = min(AgentRegistry.shared.notificationHistory.count, 8)
+                target = NotchGeometry.frame(size: CGSize(width: 560, height: CGFloat(80 + hc * 32)), on: screen)
+            } else if showDropSuggestions {
                 target = NotchGeometry.frame(size: CGSize(width: 560, height: 180), on: screen)
             } else {
                 let registry = AgentRegistry.shared

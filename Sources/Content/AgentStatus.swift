@@ -86,6 +86,7 @@ final class AgentRegistry {
 
     private(set) var agents: [AgentStatus] = []
     var notifications: [HUDNotification] = []
+    var notificationHistory: [HUDNotification] = []  // persistent history
     var dropSuggestions: [DropSuggestion] = []
     private var progressTimer: Task<Void, Never>?
 
@@ -123,12 +124,16 @@ final class AgentRegistry {
     func pushNotification(agent: String, message: String, state: AgentStatus.State = .done) {
         let notif = HUDNotification(agent: agent, message: message, state: state)
         notifications.append(notif)
-        // Subtle system sound
+        notificationHistory.insert(notif, at: 0)
+        // Keep history to 50 max
+        if notificationHistory.count > 50 { notificationHistory.removeLast() }
+        // Sound
         if state == .attention || state == .error {
             NSSound(named: .init("Basso"))?.play()
         } else {
             NSSound(named: .init("Pop"))?.play()
         }
+        // Auto-dismiss from live stack after 3s
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
             notifications.removeAll { $0.id == notif.id }

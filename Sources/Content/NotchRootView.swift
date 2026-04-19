@@ -1,13 +1,14 @@
 import SwiftUI
 
 enum Hekla {
-    static let bg      = Color(hex: 0x131110)
-    static let card    = Color(hex: 0x1E1D1B)
-    static let cardHi  = Color(hex: 0x2A2826)
-    static let cream   = Color(hex: 0xF0E6D3)
-    static let body    = Color(hex: 0xB8AFA2)
-    static let dim     = Color(hex: 0x807A72)
-    static let orange  = Color(hex: 0xD4643A)
+    // Appearance-adaptive: dark mode uses volcanic palette, light mode inverts
+    static let bg      = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua]) != nil ? NSColor(red: 0.075, green: 0.067, blue: 0.063, alpha: 1) : NSColor(red: 0.96, green: 0.95, blue: 0.93, alpha: 1) })
+    static let card    = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua]) != nil ? NSColor(red: 0.118, green: 0.114, blue: 0.106, alpha: 1) : NSColor(red: 1, green: 1, blue: 1, alpha: 1) })
+    static let cardHi  = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua]) != nil ? NSColor(red: 0.165, green: 0.157, blue: 0.149, alpha: 1) : NSColor(red: 0.9, green: 0.89, blue: 0.87, alpha: 1) })
+    static let cream   = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua]) != nil ? NSColor(red: 0.941, green: 0.902, blue: 0.827, alpha: 1) : NSColor(red: 0.1, green: 0.09, blue: 0.08, alpha: 1) })
+    static let body    = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua]) != nil ? NSColor(red: 0.722, green: 0.686, blue: 0.635, alpha: 1) : NSColor(red: 0.35, green: 0.33, blue: 0.3, alpha: 1) })
+    static let dim     = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua]) != nil ? NSColor(red: 0.502, green: 0.478, blue: 0.447, alpha: 1) : NSColor(red: 0.6, green: 0.58, blue: 0.55, alpha: 1) })
+    static let orange  = Color(hex: 0xD4643A)  // accent stays constant
     static let green   = Color(hex: 0x28C840)
     static let yellow  = Color(hex: 0xFEBC2E)
 }
@@ -43,6 +44,9 @@ struct NotchRootView: View {
                     if let agent = controller.selectedAgent {
                         AgentDetailView(agent: agent, onBack: { controller.deselectAgent() })
                             .transition(.move(edge: .trailing).combined(with: .opacity))
+                    } else if controller.showHistory {
+                        historyContent
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     } else if controller.showDropSuggestions, let url = controller.lastDroppedFile {
                         dropSuggestionsContent(url)
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
@@ -53,6 +57,7 @@ struct NotchRootView: View {
                 }
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: controller.selectedAgent?.id)
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: controller.showHistory)
 
             if dropTargeted {
                 NotchShape(bottomCornerRadius: cornerRadius)
@@ -201,24 +206,26 @@ struct NotchRootView: View {
             let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }
 
             VStack(spacing: 6) {
-                // Active agents — full width, prominent
                 ForEach(active) { agent in
-                    AgentCard(status: agent, compact: false)
+                    let gi = registry.agents.firstIndex(where: { $0.id == agent.id }) ?? 0
+                    AgentCard(status: agent, compact: false, focused: controller.focusedIndex == gi)
                         .onTapGesture { controller.selectAgent(agent) }
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
 
-                // Passive agents — 2-column grid, compact
                 if !passive.isEmpty {
                     let columns = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
                     LazyVGrid(columns: columns, spacing: 6) {
                         ForEach(passive) { agent in
-                            AgentCard(status: agent, compact: true)
+                            let gi = registry.agents.firstIndex(where: { $0.id == agent.id }) ?? 0
+                            AgentCard(status: agent, compact: true, focused: controller.focusedIndex == gi)
                                 .onTapGesture { controller.selectAgent(agent) }
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
                 }
-
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: registry.agents.map(\.state))
             .padding(.horizontal, 12)
             .scaleEffect(dropTargeted ? 0.97 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: dropTargeted)
@@ -292,6 +299,60 @@ struct NotchRootView: View {
                 }
             }
             .padding(.horizontal, 12)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Notification history
+
+    private var historyContent: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 38)
+
+            HStack {
+                Text("NOTIFICATION HISTORY")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Hekla.orange)
+                    .kerning(1.5)
+                Spacer()
+                Button { controller.toggleHistory() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Hekla.dim)
+                        .frame(width: 16, height: 16)
+                        .background(Hekla.cardHi, in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 2) {
+                    ForEach(Array(registry.notificationHistory.prefix(20).enumerated()), id: \.element.id) { idx, notif in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(notif.state.color)
+                                .frame(width: 5, height: 5)
+                            Text(notif.agent.uppercased())
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Hekla.cream)
+                                .kerning(0.8)
+                                .frame(width: 70, alignment: .leading)
+                            Text(notif.message)
+                                .font(.system(size: 9))
+                                .foregroundStyle(Hekla.dim)
+                                .lineLimit(1)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(idx % 2 == 0 ? Hekla.card.opacity(0.5) : Color.clear)
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
 
             Spacer(minLength: 0)
         }
@@ -394,12 +455,30 @@ struct NotchRootView: View {
                 .font(.system(size: 8, design: .monospaced))
                 .foregroundStyle(Hekla.dim)
             Spacer()
+
+            // History button
+            Button { controller.toggleHistory() } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 8))
+                    if !registry.notificationHistory.isEmpty {
+                        Text("\(registry.notificationHistory.count)")
+                            .font(.system(size: 7, weight: .medium, design: .monospaced))
+                    }
+                }
+                .foregroundStyle(Hekla.dim)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Hekla.cardHi.opacity(0.5), in: RoundedRectangle(cornerRadius: 3))
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
+
             ForEach(["Ollama", "Gmail", "Telegram"], id: \.self) { service in
                 HStack(spacing: 2) {
                     Text(service).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
                     Text("✓").font(.system(size: 8)).foregroundStyle(Hekla.green)
                 }
-                .padding(.leading, 8)
+                .padding(.leading, 6)
             }
         }
     }
@@ -443,6 +522,7 @@ struct HUDPill: View {
 struct AgentCard: View {
     @Bindable var status: AgentStatus
     var compact: Bool = false
+    var focused: Bool = false
 
     var body: some View {
         HStack(spacing: compact ? 6 : 8) {
@@ -499,11 +579,17 @@ struct AgentCard: View {
         .padding(.vertical, compact ? 6 : 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(status.justCompleted ? Hekla.green.opacity(0.15) : Hekla.card)
+                .fill(status.justCompleted ? Hekla.green.opacity(0.15) : (focused ? Hekla.orange.opacity(0.08) : Hekla.card))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(status.justCompleted ? Hekla.green.opacity(0.4) : Hekla.cardHi.opacity(0.4), lineWidth: 0.5)
+                        .stroke(
+                            focused ? Hekla.orange.opacity(0.5)
+                            : status.justCompleted ? Hekla.green.opacity(0.4)
+                            : Hekla.cardHi.opacity(0.4),
+                            lineWidth: focused ? 1 : 0.5
+                        )
                 )
+                .animation(.easeInOut(duration: 0.15), value: focused)
                 .animation(.easeInOut(duration: 0.3), value: status.justCompleted)
         )
         .contentShape(Rectangle())
