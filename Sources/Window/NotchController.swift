@@ -15,7 +15,7 @@ final class NotchController {
     var lastDroppedFile: URL?
     var showDropSuggestions = false
     var showHistory = false
-    var focusedIndex: Int = -1  // -1 = no focus
+    var focusedIndex: Int = -1
 
     var selectedAgent: AgentStatus?
 
@@ -56,6 +56,8 @@ final class NotchController {
     }
 
     func hoverEnded() {
+        // Don't collapse during animation — prevents the expand/collapse race
+        // that triggers the constraint crash.
         guard !animating else { return }
         selectedAgent = nil
         showDropSuggestions = false
@@ -88,29 +90,25 @@ final class NotchController {
         selectedAgent = nil
     }
 
-    func resizePanel() {
-        // No-op: fixed expanded size, SwiftUI handles content layout
-    }
+    func resizePanel() { /* no-op: fixed size */ }
 
     func didReceiveDrop(_ url: URL) {
         lastDroppedFile = url
         showDropSuggestions = true
         AgentRegistry.shared.suggestForDrop(url)
         state = .expanded
-        // no-op: fixed expanded size
     }
 
     func dismissDropSuggestions() {
         showDropSuggestions = false
         AgentRegistry.shared.clearDropSuggestions()
-        // no-op: fixed expanded size
     }
 
     // MARK: - Global hotkey (⌘Space)
 
     private func registerHotkey() {
         var hotKeyID = EventHotKeyID()
-        hotKeyID.signature = OSType(0x4E504C)  // "NPL"
+        hotKeyID.signature = OSType(0x4E504C)
         hotKeyID.id = 1
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -121,8 +119,6 @@ final class NotchController {
             return noErr
         }
         InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, nil, nil)
-
-        // ⌘Space = kVK_Space + cmdKey
         RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
     }
 
@@ -134,7 +130,6 @@ final class NotchController {
     }
 
     private static func hotkeyFired() {
-        // Find the controller through the app delegate
         guard let delegate = NSApp.delegate as? AppDelegate,
               let controller = delegate.notchController else { return }
         controller.toggle()
@@ -147,16 +142,14 @@ final class NotchController {
             guard let self, self.state == .expanded else { return event }
             let agents = AgentRegistry.shared.agents
             switch event.keyCode {
-            case 125: // down arrow
+            case 125: // down
                 self.focusedIndex = min(self.focusedIndex + 1, agents.count - 1)
                 return nil
-            case 126: // up arrow
+            case 126: // up
                 self.focusedIndex = max(self.focusedIndex - 1, -1)
                 return nil
-            case 36: // return/enter
-                if self.selectedAgent != nil {
-                    return event // already in detail, pass through
-                }
+            case 36: // enter
+                if self.selectedAgent != nil { return event }
                 if self.focusedIndex >= 0, self.focusedIndex < agents.count {
                     self.selectAgent(agents[self.focusedIndex])
                 }
@@ -166,7 +159,6 @@ final class NotchController {
                     self.deselectAgent()
                 } else if self.showHistory {
                     self.showHistory = false
-                    // fixed size, no resize needed
                 } else {
                     self.toggle()
                 }
@@ -189,15 +181,18 @@ final class NotchController {
     private func animatePanelFrame(to state: NotchState) {
         guard let panel, let screen = NSScreen.main else { return }
 
-        // Fixed sizes — no dynamic resizing. SwiftUI ScrollView handles content.
         let target = NotchGeometry.frame(for: state, on: screen)
+        let expanding = (state == .expanded)
 
         animating = true
-        panel.setFrame(target, display: true)
-        let expanding = (state == .expanded)
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(expanding ? 400 : 100))
-            self.animating = false
-        }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = expanding ? 0.35 : 0.2
+            ctx.timingFunction = CAMediaTimingFunction(
+                name: expanding ? .easeInEaseOut : .easeIn
+            )
+            panel.animator().setFrame(target, display: true)
+        }, completionHandler: { [weak self] in
+            self?.animating = false
+        })
     }
 }
