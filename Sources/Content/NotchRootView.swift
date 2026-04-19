@@ -22,6 +22,7 @@ struct NotchRootView: View {
     @State private var showAskInput = false
     @State private var askText = ""
     @State private var askResponse: String?
+    @State private var askVia: String?
 
     private let cornerRadius: CGFloat = 22
 
@@ -202,7 +203,7 @@ struct NotchRootView: View {
                         .background(PairSession.shared.status == .live ? Hekla.green.opacity(0.15) : Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
                     }
                     .buttonStyle(.plain)
-                    .disabled(!OpenClawBridge.shared.isAvailable && PairSession.shared.status == .idle)
+                    .disabled(!NotchChatClient.shared.isReady && PairSession.shared.status == .idle)
                 }
 
                 // Quick action icons
@@ -451,12 +452,20 @@ struct NotchRootView: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Hekla.cardHi, lineWidth: 0.5)))
 
             if let response = askResponse {
-                HStack(alignment: .top, spacing: 6) {
-                    Circle().fill(Hekla.orange).frame(width: 4, height: 4).padding(.top, 4)
-                    Text(response)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Hekla.body)
-                        .lineLimit(3)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .top, spacing: 6) {
+                        Circle().fill(Hekla.orange).frame(width: 4, height: 4).padding(.top, 4)
+                        Text(response)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Hekla.body)
+                            .lineLimit(5)
+                    }
+                    if let via = askVia {
+                        Text(via.uppercased())
+                            .font(.system(size: 6, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(via == "chat-api" ? Hekla.green : Hekla.dim)
+                            .kerning(0.5)
+                    }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -471,34 +480,24 @@ struct NotchRootView: View {
         let question = askText
         askText = ""
 
-        let ebridge = EurekaBridge.shared
-        if ebridge.isConnected || OpenClawBridge.shared.isAvailable {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                askResponse = "Thinking…"
-            }
-            Task {
-                if let response = await ebridge.sendCommandRouted(question) {
-                    await MainActor.run {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            askResponse = response
-                        }
-                    }
-                } else {
-                    await MainActor.run {
-                        withAnimation { askResponse = "No response from Eureka." }
-                    }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            askResponse = "Thinking…"
+            askVia = nil
+        }
+
+        Task {
+            let (reply, via) = await NotchChatClient.shared.send(question)
+            await MainActor.run {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    askResponse = reply
+                    askVia = via
                 }
-                AgentRegistry.shared.pushNotification(agent: "Eureka", message: "Answered: \(question)", state: .done)
             }
-        } else {
-            // Offline fallback
-            let responses = [
-                "Eureka is offline. Connect to 100.83.83.58 to use real commands.",
-                "Can't reach the API. Is the Linux box running?",
-            ]
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                askResponse = responses[abs(question.hashValue) % responses.count]
-            }
+            AgentRegistry.shared.pushNotification(
+                agent: "Eureka",
+                message: "Answered via \(via)",
+                state: .done
+            )
         }
     }
 
@@ -557,10 +556,14 @@ struct NotchRootView: View {
                     .foregroundStyle(bridge.isConnected ? Hekla.green : Color(hex: 0xFF5F57))
             }
             .padding(.leading, 6)
-            // OpenClaw status
+            // Chat API status
             HStack(spacing: 2) {
-                Text("◆").font(.system(size: 6)).foregroundStyle(OpenClawBridge.shared.isAvailable ? Hekla.green : Hekla.dim)
-                Text("OC").font(.system(size: 7, design: .monospaced)).foregroundStyle(Hekla.dim)
+                Circle().fill(
+                    NotchChatClient.shared.status == .ready ? Hekla.green
+                    : NotchChatClient.shared.status == .disabled ? Hekla.dim
+                    : Color(hex: 0xFF5F57)
+                ).frame(width: 4, height: 4)
+                Text("Chat").font(.system(size: 7, design: .monospaced)).foregroundStyle(Hekla.dim)
             }
             .padding(.leading, 6)
 

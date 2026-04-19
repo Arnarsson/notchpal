@@ -445,18 +445,12 @@ final class EurekaBridge {
     // MARK: - Ask routing
 
     func sendCommandRouted(_ message: String) async -> String? {
-        // 1. Prefer direct Eureka chat via OpenClaw ACP (same as Telegram)
-        if OpenClawBridge.shared.isAvailable {
-            if let reply = await OpenClawBridge.shared.chat(message) {
-                return reply
-            }
-        }
-        // 2. Try Eureka API catchup
+        // 1. Try Eureka API catchup
         if let result = await sendCommand(message),
            !result.contains("credit balance is too low") {
             return result
         }
-        // 3. Fallback: search memory
+        // 2. Fallback: search memory
         return await searchMemory(message)
     }
 
@@ -495,93 +489,147 @@ final class EurekaBridge {
 
 // MARK: - Feature 5: OpenClaw Agent Bridge (text chat)
 
-/// Direct chat with Eureka via OpenClaw Gateway REST API.
-/// Session locked to agent:main:notch:sven — talks to Eureka only.
-///
-/// Protocol (per Eureka spec):
-///   POST /api/v1/session/send → {runId}
-///   GET  /api/v1/session/stream?sessionKey=... → SSE (assistant.delta, assistant.done)
-///   Auth: Authorization: Bearer <gateway-token>
+// MARK: - NotchChatClient (Feature-flagged direct Eureka chat)
+
+/// Compile-time default; overridden by NOTCH_CHAT_API_ENABLED env var.
+private let _chatAPIDefaultEnabled = false
+
 @Observable
-final class OpenClawBridge {
-    static let shared = OpenClawBridge()
+final class NotchChatClient {
+    static let shared = NotchChatClient()
 
-    let gatewayURL = "http://127.0.0.1:18789"  // via SSH tunnel
-    let sessionKey = "agent:main:notch:sven"
+    // Config — all overridable via env vars, no persistence (CLAUDE.md rule #7)
+    let isEnabled: Bool
+    let baseURL: String
+    let sessionKey: String
+    private let token: String?
 
-    var isAvailable = false
+    enum Status: String {
+        case disabled       // flag off
+        case connecting     // probing
+        case ready          // 200 from send endpoint
+        case unauthorized   // 401
+        case unavailable    // 404 / 501
+        case error          // network / other
+    }
+    var status: Status
     var lastError: String?
-    var lastReply: String?
+
+    // Streaming state
     var streaming = false
     var streamedText = ""
+    var lastReply: String?
 
-    private var gatewayToken: String? = ProcessInfo.processInfo.environment["OPENCLAW_TOKEN"]
+    // Message history (in-memory, max 50)
+    struct ChatMessage: Identifiable {
+        let id = UUID()
+        let role: String      // "user" or "assistant"
+        let text: String
+        let ts: Date
+        var runId: String?
+        var via: String       // "chat-api" or "fallback"
+    }
+    var messages: [ChatMessage] = []
+
     private let session: URLSession
 
     private init() {
+        let env = ProcessInfo.processInfo.environment
+        self.isEnabled = env["NOTCH_CHAT_API_ENABLED"]?.lowercased() == "true" || _chatAPIDefaultEnabled
+        self.baseURL = env["NOTCH_CHAT_BASE_URL"] ?? EurekaBridge.shared.baseURL
+        self.sessionKey = env["NOTCH_CHAT_SESSION_KEY"] ?? "agent:main:notch:sven"
+        self.token = env["OPENCLAW_TOKEN"]
+        self.status = isEnabled ? .connecting : .disabled
+
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 35
         self.session = URLSession(configuration: config)
     }
 
+    // MARK: - Probe
+
     func probe() async {
-        // Check if gateway session/send endpoint exists
-        guard let url = URL(string: "\(gatewayURL)/api/v1/session/send") else {
-            markOffline("Bad URL")
-            return
+        guard isEnabled else { status = .disabled; return }
+        status = .connecting
+
+        // Check if /api/v1/session/send exists
+        guard let url = URL(string: "\(baseURL)/api/v1/session/send") else {
+            status = .error; lastError = "Bad URL"; return
         }
 
-        // Also check basic health
-        if let healthURL = URL(string: "\(gatewayURL)/health") {
-            do {
-                let (data, resp) = try await session.data(from: healthURL)
-                guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
-                    markOffline("Gateway unhealthy")
-                    return
-                }
-                // Check if session endpoints are available (404 = not implemented yet)
-                let (_, sendResp) = try await session.data(from: url)
-                let sendCode = (sendResp as? HTTPURLResponse)?.statusCode ?? 0
-                // 405 Method Not Allowed = endpoint exists but needs POST
-                // 401 = exists but needs auth
-                // 404 = not implemented
-                isAvailable = sendCode != 404
-                if !isAvailable {
-                    markOffline("Chat endpoints not deployed yet")
-                }
-            } catch {
-                markOffline(error.localizedDescription)
+        // OPTIONS or GET to check existence
+        do {
+            let (_, resp) = try await session.data(from: url)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            switch code {
+            case 401: status = .unauthorized; lastError = "Token required"
+            case 404, 501: status = .unavailable; lastError = "Endpoints not deployed"
+            case 200, 405: status = .ready // 405 = exists, just needs POST
+            default: status = .ready // optimistic
             }
+        } catch {
+            status = .error; lastError = error.localizedDescription
         }
 
+        // Register agent
         let r = AgentRegistry.shared
         let agent = r.agent(id: "openclaw") ?? r.addAgent(id: "openclaw", name: "Eureka Chat", icon: "sparkle")
-        agent.state = isAvailable ? .idle : .error
-        agent.label = isAvailable ? "Ready · \(sessionKey)" : (lastError ?? "Offline")
+        agent.state = status == .ready ? .idle : (status == .disabled ? .idle : .error)
+        agent.label = statusLabel
         agent.sourceEndpoint = "/api/v1/session/send"
         agent.lastUpdated = Date()
     }
 
-    private func markOffline(_ reason: String) {
-        isAvailable = false
-        lastError = reason
+    var statusLabel: String {
+        switch status {
+        case .disabled: return "Chat API disabled"
+        case .connecting: return "Connecting…"
+        case .ready: return "Ready · \(sessionKey)"
+        case .unauthorized: return "Unauthorized — set OPENCLAW_TOKEN"
+        case .unavailable: return "Endpoints not deployed yet"
+        case .error: return lastError ?? "Error"
+        }
     }
 
-    /// Send a message and stream the reply.
-    func chat(_ text: String) async -> String? {
-        // If gateway chat endpoints aren't deployed, fall back to memory search
-        guard isAvailable else {
-            return await EurekaBridge.shared.searchMemory(text)
+    var isReady: Bool { status == .ready }
+
+    // MARK: - Send + Stream
+
+    /// Send a message. Returns the final reply text.
+    /// Falls back to EurekaBridge if not ready.
+    func send(_ text: String) async -> (reply: String, via: String) {
+        // Record user message
+        let userMsg = ChatMessage(role: "user", text: text, ts: Date(), via: "pending")
+        appendMessage(userMsg)
+
+        // Try chat API if ready
+        if isReady {
+            if let reply = await sendViaAPI(text) {
+                let assistantMsg = ChatMessage(role: "assistant", text: reply, ts: Date(), via: "chat-api")
+                appendMessage(assistantMsg)
+                return (reply, "chat-api")
+            }
         }
 
-        // 1. POST /api/v1/session/send
-        guard let sendURL = URL(string: "\(gatewayURL)/api/v1/session/send") else { return nil }
+        // Fallback
+        let fallbackReply = await EurekaBridge.shared.sendCommandRouted(text)
+        let reply = fallbackReply ?? "No response"
+        let assistantMsg = ChatMessage(role: "assistant", text: reply, ts: Date(), via: "fallback")
+        appendMessage(assistantMsg)
+        return (reply, "fallback")
+    }
+
+    private func appendMessage(_ msg: ChatMessage) {
+        messages.append(msg)
+        if messages.count > 50 { messages.removeFirst() }
+    }
+
+    private func sendViaAPI(_ text: String) async -> String? {
+        guard let sendURL = URL(string: "\(baseURL)/api/v1/session/send") else { return nil }
         var request = URLRequest(url: sendURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = gatewayToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        if let t = token { request.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
 
         let clientMessageId = UUID().uuidString
         let body: [String: Any] = [
@@ -593,41 +641,33 @@ final class OpenClawBridge {
 
         do {
             let (data, resp) = try await session.data(for: request)
-            guard let http = resp as? HTTPURLResponse else { return nil }
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
 
-            if http.statusCode == 404 {
-                // Endpoints not deployed yet — fall back
-                isAvailable = false
-                lastError = "Chat endpoints not deployed yet"
-                return await EurekaBridge.shared.searchMemory(text)
-            }
-
-            guard (200..<300).contains(http.statusCode) else {
-                lastError = "HTTP \(http.statusCode)"
-                return "Error: HTTP \(http.statusCode)"
+            switch code {
+            case 401:
+                status = .unauthorized; lastError = "Token invalid"; return nil
+            case 404, 501:
+                status = .unavailable; lastError = "Not deployed"; return nil
+            case 200..<300:
+                break
+            default:
+                lastError = "HTTP \(code)"; return nil
             }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let runId = json["runId"] as? String else {
-                return "Error: invalid response"
-            }
+                  let runId = json["runId"] as? String else { return nil }
 
-            // 2. Stream reply via SSE
             return await streamReply(runId: runId)
-
         } catch {
             lastError = error.localizedDescription
-            return "Error: \(error.localizedDescription)"
+            return nil
         }
     }
 
-    /// Listen on SSE stream for the reply matching runId.
     private func streamReply(runId: String) async -> String? {
-        guard let streamURL = URL(string: "\(gatewayURL)/api/v1/session/stream?sessionKey=\(sessionKey)") else { return nil }
+        guard let streamURL = URL(string: "\(baseURL)/api/v1/session/stream?sessionKey=\(sessionKey)") else { return nil }
         var request = URLRequest(url: streamURL)
-        if let token = gatewayToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        if let t = token { request.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
 
         streaming = true
         streamedText = ""
@@ -637,46 +677,38 @@ final class OpenClawBridge {
             let (bytes, _) = try await session.bytes(for: request)
 
             for try await line in bytes.lines {
-                // SSE format: "data: {json}"
                 guard line.hasPrefix("data: ") else { continue }
                 let jsonStr = String(line.dropFirst(6))
                 guard let data = jsonStr.data(using: .utf8),
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
 
-                let eventRunId = json["runId"] as? String
-                guard eventRunId == runId || eventRunId == nil else { continue }
+                let evtRunId = json["runId"] as? String
+                guard evtRunId == runId || evtRunId == nil else { continue }
 
-                let eventType = json["type"] as? String ?? ""
-
-                switch eventType {
+                switch json["type"] as? String ?? "" {
                 case "assistant.delta":
-                    if let delta = json["text"] as? String {
-                        streamedText += delta
-                    }
+                    if let delta = json["text"] as? String { streamedText += delta }
                 case "assistant.done":
-                    let finalText = json["text"] as? String ?? streamedText
-                    lastReply = finalText
-                    return finalText
+                    let final = json["text"] as? String ?? streamedText
+                    lastReply = final
+                    return final
                 case "run.error":
-                    let errorMsg = json["error"] as? String ?? "Unknown error"
-                    lastError = errorMsg
-                    return "Error: \(errorMsg)"
-                default:
-                    break // heartbeat, etc.
+                    lastError = json["error"] as? String ?? "Error"
+                    return nil
+                default: break
                 }
             }
         } catch {
             lastError = error.localizedDescription
         }
 
-        // If we got partial text, return it
-        if !streamedText.isEmpty {
-            lastReply = streamedText
-            return streamedText
-        }
+        if !streamedText.isEmpty { lastReply = streamedText; return streamedText }
         return nil
     }
 }
+
+// Keep OpenClawBridge as a thin alias for backward compat
+typealias OpenClawBridge = NotchChatClient
 
 // MARK: - Feature 6: Pair Session (screen + voice)
 // Feature-flagged: set ENABLE_PAIR_SESSION=true env var to activate.

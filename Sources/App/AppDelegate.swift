@@ -28,8 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Connect to real Eureka API
         EurekaBridge.shared.startPolling(interval: 5)
 
-        // Probe OpenClaw (Feature 5)
-        Task { await OpenClawBridge.shared.probe() }
+        // Probe NotchChat API (feature-flagged)
+        Task { await NotchChatClient.shared.probe() }
 
         installQuitOnlyStatusItem()
     }

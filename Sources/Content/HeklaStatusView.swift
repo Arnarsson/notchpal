@@ -549,10 +549,10 @@ struct OpenClawDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             card("STATUS") {
-                row("Gateway", oc.gatewayURL)
+                row("Base URL", oc.baseURL)
                 row("Session", oc.sessionKey)
-                row("Available", oc.isAvailable ? "Yes" : "No")
-                row("Streaming", oc.streaming ? "Yes" : "No")
+                row("Status", oc.status.rawValue)
+                row("Enabled", oc.isEnabled ? "Yes" : "No (set NOTCH_CHAT_API_ENABLED=true)")
                 if let err = oc.lastError { row("Error", err) }
                 if let reply = oc.lastReply { row("Last reply", String(reply.prefix(50))) }
             }
