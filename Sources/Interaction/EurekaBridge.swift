@@ -442,15 +442,34 @@ final class EurekaBridge {
         }
     }
 
-    // MARK: - Ask routing (Feature 5 integration)
+    // MARK: - Ask routing
 
     func sendCommandRouted(_ message: String) async -> String? {
-        // Prefer OpenClaw if available
-        if OpenClawBridge.shared.isAvailable {
-            return await OpenClawBridge.shared.chat(message)
+        // Try catchup first (needs AI credits)
+        if let result = await sendCommand(message),
+           !result.contains("credit balance is too low") {
+            return result
         }
-        // Fallback to Eureka
-        return await sendCommand(message)
+        // Fallback: search Eureka's memory
+        return await searchMemory(message)
+    }
+
+    func searchMemory(_ query: String) async -> String? {
+        guard let data = await fetch("/api/v2/bridge/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)") else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]] else { return nil }
+
+        if results.isEmpty { return "No results for '\(query)'" }
+
+        // Format top 3 results
+        let lines = results.prefix(3).map { r -> String in
+            let title = r["title"] as? String ?? ""
+            let snippet = (r["snippet"] as? String ?? "").prefix(100)
+            let source = r["source"] as? String ?? ""
+            let date = (r["date"] as? String ?? "").prefix(10)
+            return "[\(source) · \(date)] \(title)\n\(snippet)"
+        }
+        return lines.joined(separator: "\n\n")
     }
 
     // MARK: - Networking
