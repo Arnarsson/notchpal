@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1D01B76E0FEA61B0B8BE7E2F /* AgentStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9926E9987D1BF37EC7B6DDF3 /* AgentStatus.swift */; };
+		3A862158AAEE88905F4E11AF /* EndpointResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D52139F12CE41A78F324AC /* EndpointResolver.swift */; };
 		3EEA9710F9BCB4ED5D53BF0E /* NotchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431E1AB602D04A738B086C18 /* NotchRootView.swift */; };
 		476949F400728913917FC143 /* NotchPalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B1A7A4AE6F1781A4EC68B3 /* NotchPalApp.swift */; };
 		48DB77DD235D3F5669363B39 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3634230B449CBAC773B382C2 /* SmokeTests.swift */; };
@@ -37,6 +38,7 @@
 		209D2DCACCE068D1627E3804 /* NotchPal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotchPal.entitlements; sourceTree = "<group>"; };
 		22EF304F749C6C29333B11E5 /* NotchPal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotchPal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3634230B449CBAC773B382C2 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
+		38D52139F12CE41A78F324AC /* EndpointResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndpointResolver.swift; sourceTree = "<group>"; };
 		38F9BF53D33AC2E04CB371A0 /* EurekaBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EurekaBridge.swift; sourceTree = "<group>"; };
 		431E1AB602D04A738B086C18 /* NotchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchRootView.swift; sourceTree = "<group>"; };
 		65B1A7A4AE6F1781A4EC68B3 /* NotchPalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPalApp.swift; sourceTree = "<group>"; };
@@ -66,6 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				83AC37A7D1999D8487EAF854 /* DragReceiver.swift */,
+				38D52139F12CE41A78F324AC /* EndpointResolver.swift */,
 				38F9BF53D33AC2E04CB371A0 /* EurekaBridge.swift */,
 				EB1C767C90E2E3C307886524 /* HoverTracker.swift */,
 				952C3C8C5C3F149CE3142F5E /* ScreenShareManager.swift */,
@@ -215,6 +218,7 @@
 				1D01B76E0FEA61B0B8BE7E2F /* AgentStatus.swift in Sources */,
 				4EF0FB99C54C958C7453EB1D /* AppDelegate.swift in Sources */,
 				D94495642FC68846E64FC7DD /* DragReceiver.swift in Sources */,
+				3A862158AAEE88905F4E11AF /* EndpointResolver.swift in Sources */,
 				51D9AB28BC977D41797DA8E9 /* EurekaBridge.swift in Sources */,
 				CAA06084774326EC12151801 /* HeklaStatusView.swift in Sources */,
 				4A5BA6552D69964763FE3AA5 /* HoverTracker.swift in Sources */,

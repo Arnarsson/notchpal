@@ -51,6 +51,7 @@ struct AgentDetailView: View {
                 case "memory": MemoryDetailContent()
                 case "log": LogDetailContent()
                 case "screenshare": ScreenShareDetailContent()
+                case "infra": BridgeDebugContent()
                 default: GenericDetailContent(agent: agent)
                 }
             }
@@ -449,6 +450,87 @@ struct LogDetailContent: View {
         HStack(spacing: 3) {
             Text(n).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(Hekla.cream)
             Text(label).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
+        }
+    }
+}
+
+// MARK: - Bridge Debug
+
+struct BridgeDebugContent: View {
+    @Bindable var bridge = EurekaBridge.shared
+    @Bindable var resolver = EndpointResolver.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            section("CONNECTION") {
+                row("Base URL", bridge.baseURL)
+                row("Status", bridge.isConnected ? "Connected" : "Offline")
+                if let poll = bridge.lastPoll {
+                    let fmt = DateFormatter()
+                    let _ = fmt.dateFormat = "HH:mm:ss"
+                    row("Last poll", fmt.string(from: poll))
+                }
+                if let err = bridge.error {
+                    row("Error", err)
+                }
+            }
+
+            section("DISCOVERY") {
+                if let d = resolver.discoveredAt {
+                    let fmt = DateFormatter()
+                    let _ = fmt.dateFormat = "HH:mm:ss"
+                    row("Discovered", fmt.string(from: d))
+                } else {
+                    row("Status", resolver.lastError ?? "Not discovered")
+                }
+            }
+
+            section("RESOLVED ENDPOINTS") {
+                ForEach(EndpointResolver.Capability.allCases, id: \.rawValue) { cap in
+                    if let ep = resolver.endpoints[cap] {
+                        HStack {
+                            Text(cap.rawValue.uppercased())
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Hekla.orange)
+                                .frame(width: 70, alignment: .leading)
+                            Text(ep.method)
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Hekla.green)
+                            Text(ep.path)
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundStyle(Hekla.cream)
+                                .lineLimit(1)
+                        }
+                    } else {
+                        HStack {
+                            Text(cap.rawValue.uppercased())
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Hekla.dim)
+                                .frame(width: 70, alignment: .leading)
+                            Text("—")
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundStyle(Hekla.dim)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1.5)
+            content()
+        }
+        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+            Spacer()
+            Text(value).font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream).lineLimit(1)
         }
     }
 }

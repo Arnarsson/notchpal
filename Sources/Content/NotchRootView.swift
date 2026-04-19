@@ -155,7 +155,7 @@ struct NotchRootView: View {
 
             // Header
             HStack(alignment: .center) {
-                Text("HEKLA")
+                Text("EUREKA")
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Hekla.orange)
                     .kerning(2)
@@ -367,7 +367,7 @@ struct NotchRootView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(Hekla.dim)
 
-                TextField("Ask HEKLA anything…", text: $askText)
+                TextField("Ask Eureka…", text: $askText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Hekla.cream)
@@ -467,7 +467,7 @@ struct NotchRootView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 0) {
-            Text("HEKLA")
+            Text("EUREKA")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .foregroundStyle(Hekla.dim)
                 .kerning(0.5)
