@@ -82,8 +82,10 @@ final class EurekaBridge {
         await pollEmail()
         await pollInboxTriage()
         await pollCalendar()
+        await pollMeetingProximity()
         await pollIssues()
         await pollOpenLoops()
+        await pollDaily3()
         await pollActivity()
         await pollInsights()
         await pollBridge()
@@ -251,7 +253,9 @@ final class EurekaBridge {
         }
     }
 
-    // MARK: - Inbox Triage
+    // MARK: - Inbox Triage (Feature 2)
+
+    var triageItems: [[String: Any]] = []
 
     private func pollInboxTriage() async {
         let ep = "/api/inbox/triage"
@@ -259,7 +263,14 @@ final class EurekaBridge {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
         let priority = json["priority"] as? [[String: Any]] ?? []
-        priorityEmailCount = max(priorityEmailCount, priority.count)
+        triageItems = Array(priority.prefix(5))
+        priorityEmailCount = priority.count
+
+        let r = AgentRegistry.shared
+        let agent = r.agent(id: "triage") ?? r.addAgent(id: "triage", name: "Inbox", icon: "tray.fill")
+        stamp(agent, endpoint: ep)
+        agent.state = priority.isEmpty ? .idle : .attention
+        agent.label = "\(priority.count) need triage"
     }
 
     // MARK: - Open Loops
@@ -273,6 +284,92 @@ final class EurekaBridge {
         let stuck = patterns.first { ($0["type"] as? String) == "stuck" }
         let ids = stuck?["issue_ids"] as? [String] ?? []
         stuckIssueCount = ids.count
+    }
+
+    // MARK: - Daily Focus (Feature 3)
+
+    var daily3Items: [[String: Any]] = []
+
+    private func pollDaily3() async {
+        let ep = "/api/daily3/today"
+        guard let data = await fetch(ep) else { return }
+
+        if let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]], !items.isEmpty {
+            daily3Items = items
+            let r = AgentRegistry.shared
+            let agent = r.agent(id: "daily3") ?? r.addAgent(id: "daily3", name: "Daily 3", icon: "target")
+            stamp(agent, endpoint: ep)
+            let done = items.filter { ($0["done"] as? Bool) == true }.count
+            agent.state = done == items.count ? .done : .busy
+            agent.label = "\(done)/\(items.count) complete"
+        }
+        // If null/404, don't register agent — graceful absence
+    }
+
+    // MARK: - Meeting Proximity (Feature 4)
+
+    var imminentMeeting: [String: Any]?
+    var meetingBrief: String?
+
+    private func pollMeetingProximity() async {
+        // Reuses calendar data already fetched
+        guard let calAgent = AgentRegistry.shared.agent(id: "calendar"),
+              let ep = calAgent.sourceEndpoint,
+              let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let events = json["events"] as? [[String: Any]] else {
+            imminentMeeting = nil
+            return
+        }
+
+        let now = Date()
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        for event in events {
+            guard let startStr = event["start"] as? String,
+                  let start = fmt.date(from: startStr) ?? ISO8601DateFormatter().date(from: startStr) else { continue }
+
+            let minutesUntil = start.timeIntervalSince(now) / 60
+
+            if minutesUntil > -5 && minutesUntil < 15 {
+                let wasNil = imminentMeeting == nil
+                imminentMeeting = event
+
+                // Register meeting agent
+                let r = AgentRegistry.shared
+                let agent = r.agent(id: "meeting") ?? r.addAgent(id: "meeting", name: "Meeting", icon: "calendar.badge.clock")
+                agent.state = .attention
+                let title = event["summary"] as? String ?? "Meeting"
+                agent.label = minutesUntil > 0 ? "In \(Int(minutesUntil))min: \(title)" : "Now: \(title)"
+                stamp(agent, endpoint: ep)
+
+                // Fetch brief if available
+                if let eventId = event["id"] as? String {
+                    if let briefData = await fetch("/api/meeting/\(eventId)/brief"),
+                       let briefJson = try? JSONSerialization.jsonObject(with: briefData) as? [String: Any] {
+                        meetingBrief = briefJson["brief"] as? String ?? briefJson["notes"] as? String
+                    }
+                }
+
+                // HUD on first detection
+                if wasNil {
+                    AgentRegistry.shared.pushNotification(
+                        agent: "Meeting",
+                        message: "In \(max(1, Int(minutesUntil)))min: \(title)",
+                        state: .attention
+                    )
+                }
+                return
+            }
+        }
+
+        // No imminent meeting — clean up
+        if imminentMeeting != nil {
+            imminentMeeting = nil
+            meetingBrief = nil
+            AgentRegistry.shared.removeAgent(id: "meeting")
+        }
     }
 
     // MARK: - Quick Actions
@@ -345,6 +442,17 @@ final class EurekaBridge {
         }
     }
 
+    // MARK: - Ask routing (Feature 5 integration)
+
+    func sendCommandRouted(_ message: String) async -> String? {
+        // Prefer OpenClaw if available
+        if OpenClawBridge.shared.isAvailable {
+            return await OpenClawBridge.shared.chat(message)
+        }
+        // Fallback to Eureka
+        return await sendCommand(message)
+    }
+
     // MARK: - Networking
 
     private func fetch(_ path: String) async -> Data? {
@@ -357,5 +465,334 @@ final class EurekaBridge {
             self.error = error.localizedDescription
             return nil
         }
+    }
+}
+
+// MARK: - Feature 5: OpenClaw Agent Bridge (text chat)
+
+@Observable
+final class OpenClawBridge {
+    static let shared = OpenClawBridge()
+
+    var baseURL: String = ProcessInfo.processInfo.environment["OPENCLAW_URL"] ?? "http://localhost:8787"
+    var isAvailable = false
+    var conversationID: String?
+    var lastError: String?
+
+    private let session: URLSession
+
+    private init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        self.session = URLSession(configuration: config)
+    }
+
+    func probe() async {
+        guard let url = URL(string: "\(baseURL)/health") else { isAvailable = false; return }
+        do {
+            let (_, response) = try await session.data(from: url)
+            isAvailable = (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            isAvailable = false
+            lastError = error.localizedDescription
+        }
+
+        // Register agent
+        let r = AgentRegistry.shared
+        let agent = r.agent(id: "openclaw") ?? r.addAgent(id: "openclaw", name: "OpenClaw", icon: "sparkle")
+        agent.state = isAvailable ? .idle : .error
+        agent.label = isAvailable ? "Ready" : "Unreachable"
+        agent.sourceEndpoint = "/health"
+        agent.lastUpdated = Date()
+    }
+
+    func chat(_ text: String) async -> String? {
+        guard let url = URL(string: "\(baseURL)/v1/chat") else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = ["message": text]
+        if let cid = conversationID { body["conversation_id"] = cid }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        do {
+            let (data, _) = try await session.data(for: request)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                conversationID = json["conversation_id"] as? String ?? conversationID
+                return json["response"] as? String ?? json["text"] as? String
+            }
+            return String(data: data, encoding: .utf8)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func reset() {
+        conversationID = nil
+    }
+}
+
+// MARK: - Feature 6: Pair Session (screen + voice)
+
+import CryptoKit
+
+@Observable
+final class PairSession {
+    static let shared = PairSession()
+
+    enum Status: String { case idle, connecting, live, degraded, reconnecting, ended }
+    var status: Status = .idle
+    var sessionID = UUID().uuidString
+    var conversationID: String?
+
+    // Health
+    var latencyMS: Int = 0
+    var droppedFrames = 0
+    var framesSent = 0
+    var audioInSeconds: Double = 0
+    var lastServerMessage: Date?
+    var startTime: Date?
+
+    var healthDot: AgentStatus.State {
+        guard status == .live else { return status == .reconnecting ? .attention : .idle }
+        if latencyMS > 600 || Date().timeIntervalSince(lastServerMessage ?? .distantPast) > 5 {
+            return .attention
+        }
+        return .done
+    }
+
+    var elapsed: String {
+        guard let start = startTime else { return "00:00" }
+        let s = Int(Date().timeIntervalSince(start))
+        return String(format: "%02d:%02d", s / 60, s % 60)
+    }
+
+    // Transcript
+    struct Turn: Identifiable {
+        let id = UUID()
+        let role: String
+        let text: String
+        let ts: Date
+    }
+    var transcript: [Turn] = []
+
+    // Dedup
+    private var lastFrameHash: String?
+    private var nextSeq = 0
+
+    // WebSocket
+    private var wsTask: URLSessionWebSocketTask?
+    private var retryCount = 0
+
+    private init() {}
+
+    func start() async {
+        guard status == .idle || status == .ended else { return }
+        status = .connecting
+        startTime = Date()
+        transcript = []
+        framesSent = 0
+        droppedFrames = 0
+        audioInSeconds = 0
+        retryCount = 0
+
+        // Register agent
+        let r = AgentRegistry.shared
+        let agent = r.agent(id: "pair") ?? r.addAgent(id: "pair", name: "Pair Session", icon: "person.2.wave.2.fill")
+        agent.state = .busy
+        agent.label = "Connecting…"
+
+        await connect()
+    }
+
+    private func connect() async {
+        let base = OpenClawBridge.shared.baseURL
+            .replacingOccurrences(of: "http://", with: "ws://")
+            .replacingOccurrences(of: "https://", with: "wss://")
+        guard let url = URL(string: "\(base)/v1/pair") else {
+            status = .ended
+            return
+        }
+
+        let session = URLSession(configuration: .default)
+        wsTask = session.webSocketTask(with: url)
+        wsTask?.resume()
+
+        // Send hello
+        let hello: [String: Any] = [
+            "type": "hello",
+            "sessionID": sessionID,
+            "conversationID": conversationID as Any,
+            "capabilities": ["screen", "text"]
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: hello) {
+            try? await wsTask?.send(.data(data))
+        }
+
+        status = .live
+        if let agent = AgentRegistry.shared.agent(id: "pair") {
+            agent.state = .busy
+            agent.label = "Live · \(elapsed)"
+        }
+
+        AgentRegistry.shared.pushNotification(agent: "Pair", message: "Session started", state: .busy)
+
+        // Start frame streaming
+        startFrameLoop()
+
+        // Listen for messages
+        listenLoop()
+    }
+
+    private func startFrameLoop() {
+        Task { @MainActor in
+            let mgr = ScreenShareManager.shared
+            if !mgr.isSharing {
+                await mgr.startSharing()
+            }
+
+            while status == .live || status == .degraded {
+                try? await Task.sleep(for: .seconds(0.5)) // 2 FPS
+
+                guard let jpeg = mgr.latestFrameAsJPEG(quality: 0.5) else { continue }
+                let hash = SHA256.hash(data: jpeg).compactMap { String(format: "%02x", $0) }.joined()
+
+                if hash == lastFrameHash {
+                    continue // dedup — identical frame
+                }
+                lastFrameHash = hash
+
+                let frame: [String: Any] = [
+                    "type": "frame",
+                    "seq": nextSeq,
+                    "ts": ISO8601DateFormatter().string(from: Date()),
+                    "jpeg_base64": jpeg.base64EncodedString(),
+                    "hash": hash
+                ]
+                nextSeq += 1
+
+                if let data = try? JSONSerialization.data(withJSONObject: frame) {
+                    do {
+                        try await wsTask?.send(.data(data))
+                        framesSent += 1
+                    } catch {
+                        droppedFrames += 1
+                    }
+                }
+            }
+        }
+    }
+
+    private func listenLoop() {
+        Task {
+            while status == .live || status == .degraded {
+                guard let ws = wsTask else { break }
+                do {
+                    let message = try await ws.receive()
+                    lastServerMessage = Date()
+
+                    switch message {
+                    case .data(let data):
+                        handleServerMessage(data)
+                    case .string(let str):
+                        if let data = str.data(using: .utf8) {
+                            handleServerMessage(data)
+                        }
+                    @unknown default:
+                        break
+                    }
+                } catch {
+                    if status == .live {
+                        await handleDisconnect()
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+    private func handleServerMessage(_ data: Data) {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else { return }
+
+        switch type {
+        case "text_delta":
+            if let content = json["content"] as? String {
+                Task { @MainActor in
+                    if let last = transcript.last, last.role == "ai" {
+                        transcript[transcript.count - 1] = Turn(role: "ai", text: last.text + content, ts: Date())
+                    } else {
+                        transcript.append(Turn(role: "ai", text: content, ts: Date()))
+                    }
+                }
+            }
+        case "ping":
+            if let nonce = json["nonce"] {
+                let pong: [String: Any] = ["type": "pong", "nonce": nonce]
+                if let data = try? JSONSerialization.data(withJSONObject: pong) {
+                    Task { try? await wsTask?.send(.data(data)) }
+                }
+            }
+        case "error":
+            let msg = json["message"] as? String ?? "Unknown error"
+            Task { @MainActor in
+                AgentRegistry.shared.pushNotification(agent: "Pair", message: msg, state: .error)
+            }
+        default:
+            break
+        }
+    }
+
+    private func handleDisconnect() async {
+        status = .reconnecting
+        if let agent = AgentRegistry.shared.agent(id: "pair") {
+            agent.state = .attention
+            agent.label = "Reconnecting…"
+        }
+
+        while retryCount < 5 && status == .reconnecting {
+            retryCount += 1
+            let delay = min(Double(1 << retryCount), 15) // 2,4,8,15,15
+            try? await Task.sleep(for: .seconds(delay))
+            await connect()
+            if status == .live { return }
+        }
+
+        // Give up
+        await end()
+        AgentRegistry.shared.pushNotification(agent: "Pair", message: "Connection lost", state: .error)
+    }
+
+    func sendText(_ text: String) {
+        transcript.append(Turn(role: "user", text: text, ts: Date()))
+        let msg: [String: Any] = [
+            "type": "text",
+            "seq": nextSeq,
+            "ts": ISO8601DateFormatter().string(from: Date()),
+            "content": text
+        ]
+        nextSeq += 1
+        if let data = try? JSONSerialization.data(withJSONObject: msg) {
+            Task { try? await wsTask?.send(.data(data)) }
+        }
+    }
+
+    func end() async {
+        let bye: [String: Any] = ["type": "bye"]
+        if let data = try? JSONSerialization.data(withJSONObject: bye) {
+            try? await wsTask?.send(.data(data))
+        }
+        wsTask?.cancel(with: .goingAway, reason: nil)
+        wsTask = nil
+        status = .ended
+        lastFrameHash = nil
+        transcript = []
+        startTime = nil
+
+        ScreenShareManager.shared.stopSharing()
+        AgentRegistry.shared.removeAgent(id: "pair")
+        AgentRegistry.shared.pushNotification(agent: "Pair", message: "Session ended", state: .done)
     }
 }

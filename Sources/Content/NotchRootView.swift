@@ -184,6 +184,25 @@ struct NotchRootView: View {
 
                 Spacer()
 
+                // Pair button
+                Button {
+                    if PairSession.shared.status == .idle || PairSession.shared.status == .ended {
+                        Task { await PairSession.shared.start() }
+                        controller.selectAgent(AgentRegistry.shared.agent(id: "pair") ?? AgentStatus(id: "pair", agent: "Pair"))
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Circle().fill(PairSession.shared.status == .live ? Hekla.green : Hekla.dim).frame(width: 4, height: 4)
+                        Text(PairSession.shared.status == .live ? PairSession.shared.elapsed : "Pair")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    }
+                    .foregroundStyle(Hekla.cream)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(PairSession.shared.status == .live ? Hekla.green.opacity(0.15) : Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
+                }
+                .buttonStyle(.plain)
+                .disabled(!OpenClawBridge.shared.isAvailable && PairSession.shared.status == .idle)
+
                 // Quick action icons
                 quickAction("bolt.fill") { Task { await bridge.spawnWorker() } }
                 quickAction("envelope.arrow.triangle.branch") { Task { await bridge.syncEmail() } }
@@ -451,14 +470,13 @@ struct NotchRootView: View {
         let question = askText
         askText = ""
 
-        let bridge = EurekaBridge.shared
-        if bridge.isConnected {
-            // Real API call
+        let ebridge = EurekaBridge.shared
+        if ebridge.isConnected || OpenClawBridge.shared.isAvailable {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 askResponse = "Thinking…"
             }
             Task {
-                if let response = await bridge.sendCommand(question) {
+                if let response = await ebridge.sendCommandRouted(question) {
                     await MainActor.run {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             askResponse = response
@@ -538,6 +556,13 @@ struct NotchRootView: View {
                     .foregroundStyle(bridge.isConnected ? Hekla.green : Color(hex: 0xFF5F57))
             }
             .padding(.leading, 6)
+            // OpenClaw status
+            HStack(spacing: 2) {
+                Text("◆").font(.system(size: 6)).foregroundStyle(OpenClawBridge.shared.isAvailable ? Hekla.green : Hekla.dim)
+                Text("OC").font(.system(size: 7, design: .monospaced)).foregroundStyle(Hekla.dim)
+            }
+            .padding(.leading, 6)
+
             if !bridge.aiOnline {
                 Text("AI offline")
                     .font(.system(size: 7, weight: .medium, design: .monospaced))

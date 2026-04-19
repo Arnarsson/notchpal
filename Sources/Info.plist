@@ -31,5 +31,7 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Spike — not for distribution</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NotchPal sends mic audio to OpenClaw for pair programming.</string>
 </dict>
 </plist>

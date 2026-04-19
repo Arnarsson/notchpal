@@ -36,8 +36,13 @@ struct AgentDetailView: View {
                 case "issues": LiveIssuesView()
                 case "insights": LiveInsightsView()
                 case "activity": LiveActivityView()
+                case "triage": InboxTriageView()
+                case "daily3": DailyFocusView()
+                case "meeting": MeetingPrepView()
+                case "pair": PairSessionView()
                 case "screenshare": ScreenShareDetailContent()
                 case "bridge": BridgeDebugContent()
+                case "openclaw": OpenClawDetailView()
                 default: LiveGenericView(agent: agent)
                 }
             }
@@ -390,6 +395,294 @@ struct LiveGenericView: View {
         default: return "—"
         }
     }
+}
+
+// MARK: - Inbox Triage (Feature 2)
+
+struct InboxTriageView: View {
+    @Bindable var bridge = EurekaBridge.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("\(bridge.triageItems.count) ITEMS NEED TRIAGE")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Hekla.orange).kerning(1)
+                Spacer()
+                Button { Task { await bridge.archiveNewsletters() } } label: {
+                    Text("ARCHIVE REST").font(.system(size: 7, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Hekla.dim).kerning(0.5)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(Hekla.cardHi, in: RoundedRectangle(cornerRadius: 3))
+                }.buttonStyle(.plain)
+            }
+
+            ForEach(Array(bridge.triageItems.prefix(5).enumerated()), id: \.offset) { _, item in
+                let from = item["from_"] as? String ?? item["from_name"] as? String ?? "?"
+                let subject = item["subject"] as? String ?? "?"
+                let snippet = item["snippet"] as? String ?? ""
+
+                HStack(alignment: .top, spacing: 8) {
+                    Text(String(from.prefix(1)).uppercased())
+                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Hekla.cream)
+                        .frame(width: 18, height: 18)
+                        .background(Hekla.orange.opacity(0.2), in: RoundedRectangle(cornerRadius: 3))
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(from).font(.system(size: 9, weight: .semibold)).foregroundStyle(Hekla.cream).lineLimit(1)
+                        Text(subject).font(.system(size: 9)).foregroundStyle(Hekla.body).lineLimit(1)
+                        Text(snippet.replacingOccurrences(of: "&#39;", with: "'").prefix(60))
+                            .font(.system(size: 8)).foregroundStyle(Hekla.dim).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(6)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Hekla.card))
+            }
+
+            if bridge.triageItems.isEmpty {
+                Text("Inbox clear").font(.system(size: 10)).foregroundStyle(Hekla.dim)
+            }
+
+            openInEureka("/inbox")
+        }
+    }
+}
+
+// MARK: - Daily Focus (Feature 3)
+
+struct DailyFocusView: View {
+    @Bindable var bridge = EurekaBridge.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if bridge.daily3Items.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "target").font(.system(size: 20)).foregroundStyle(Hekla.dim)
+                    Text("No Daily 3 set for today").font(.system(size: 10)).foregroundStyle(Hekla.dim)
+                    Text("Set your priorities in the dashboard").font(.system(size: 9)).foregroundStyle(Hekla.dim)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            } else {
+                ForEach(Array(bridge.daily3Items.enumerated()), id: \.offset) { idx, item in
+                    let title = item["title"] as? String ?? item["text"] as? String ?? "?"
+                    let done = item["done"] as? Bool ?? false
+
+                    HStack(spacing: 8) {
+                        Text("\(idx + 1)")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(done ? Hekla.green : Hekla.orange)
+                            .frame(width: 16, height: 16)
+                            .background(done ? Hekla.green.opacity(0.15) : Hekla.orange.opacity(0.15), in: Circle())
+
+                        Text(title)
+                            .font(.system(size: 10, weight: done ? .regular : .medium))
+                            .foregroundStyle(done ? Hekla.dim : Hekla.cream)
+                            .strikethrough(done)
+                            .lineLimit(2)
+                        Spacer()
+                    }
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+                }
+            }
+            openInEureka("/daily")
+        }
+    }
+}
+
+// MARK: - Meeting Prep (Feature 4)
+
+struct MeetingPrepView: View {
+    @Bindable var bridge = EurekaBridge.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let meeting = bridge.imminentMeeting {
+                let title = meeting["summary"] as? String ?? "Meeting"
+                let start = (meeting["start"] as? String ?? "").prefix(16)
+                let attendees = meeting["attendees"] as? [[String: Any]] ?? []
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Hekla.cream)
+                    Text(String(start)).font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                }
+                .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+
+                if !attendees.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(Array(attendees.prefix(4).enumerated()), id: \.offset) { _, a in
+                            let name = a["displayName"] as? String ?? a["email"] as? String ?? "?"
+                            Text(String(name.prefix(8)))
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundStyle(Hekla.cream)
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(Hekla.cardHi, in: RoundedRectangle(cornerRadius: 3))
+                        }
+                    }
+                }
+
+                if let brief = bridge.meetingBrief {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("PREP NOTES").font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1)
+                        Text(brief).font(.system(size: 9)).foregroundStyle(Hekla.body).lineLimit(6)
+                    }
+                    .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+                }
+            } else {
+                Text("No imminent meeting").font(.system(size: 10)).foregroundStyle(Hekla.dim)
+            }
+            openInEureka("/schedule")
+        }
+    }
+}
+
+// MARK: - OpenClaw Detail (Feature 5)
+
+struct OpenClawDetailView: View {
+    @Bindable var oc = OpenClawBridge.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            card("STATUS") {
+                row("URL", oc.baseURL)
+                row("Available", oc.isAvailable ? "Yes" : "No")
+                if let cid = oc.conversationID { row("Conversation", String(cid.prefix(12)) + "…") }
+                if let err = oc.lastError { row("Error", err) }
+            }
+            Button { Task { await oc.probe() } } label: {
+                Text("RE-PROBE").font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Hekla.cream).kerning(1)
+                    .frame(maxWidth: .infinity).padding(.vertical, 6)
+                    .background(Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
+            }.buttonStyle(.plain)
+        }
+    }
+
+    private func card(_ t: String, @ViewBuilder c: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(t).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1.5)
+            c()
+        }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+    }
+    private func row(_ l: String, _ v: String) -> some View {
+        HStack {
+            Text(l).font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+            Spacer()
+            Text(v).font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream).lineLimit(1)
+        }
+    }
+}
+
+// MARK: - Pair Session (Feature 6)
+
+struct PairSessionView: View {
+    @Bindable var pair = PairSession.shared
+    @State private var inputText = ""
+
+    var body: some View {
+        VStack(spacing: 6) {
+            // Status bar
+            HStack(spacing: 8) {
+                Circle().fill(pair.healthDot.color).frame(width: 6, height: 6)
+                Text(pair.status.rawValue.uppercased())
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundStyle(pair.healthDot.color)
+                Text(pair.elapsed)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Hekla.cream)
+                if pair.latencyMS > 0 {
+                    Text("\(pair.latencyMS)ms")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(pair.latencyMS > 300 ? Hekla.yellow : Hekla.dim)
+                }
+                Spacer()
+                Button { Task { await pair.end() } } label: {
+                    Text("END").font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(.red.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+                }.buttonStyle(.plain)
+            }
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+
+            // Transcript
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(pair.transcript.suffix(6)) { turn in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text(turn.role == "user" ? "You" : "AI")
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .foregroundStyle(turn.role == "user" ? Hekla.cream : Hekla.orange)
+                                .frame(width: 20)
+                            Text(turn.text)
+                                .font(.system(size: 9))
+                                .foregroundStyle(Hekla.body)
+                                .lineLimit(3)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 120)
+
+            // Text input
+            HStack(spacing: 6) {
+                TextField("Type to pair…", text: $inputText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Hekla.cream)
+                    .onSubmit {
+                        guard !inputText.isEmpty else { return }
+                        pair.sendText(inputText)
+                        inputText = ""
+                    }
+                Button {
+                    guard !inputText.isEmpty else { return }
+                    pair.sendText(inputText)
+                    inputText = ""
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 14)).foregroundStyle(Hekla.orange)
+                }.buttonStyle(.plain)
+            }
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+
+            // Health footer
+            HStack(spacing: 12) {
+                Text("\(pair.framesSent) frames")
+                Text("\(pair.droppedFrames) dropped")
+                Text(String(format: "%.0fs audio", pair.audioInSeconds))
+            }
+            .font(.system(size: 7, design: .monospaced))
+            .foregroundStyle(Hekla.dim)
+        }
+    }
+}
+
+/// Helper to open Eureka in browser
+private func openInEureka(_ path: String) -> some View {
+    Button {
+        if let url = URL(string: "https://platanvejomarchy.tail12cdd5.ts.net\(path)") {
+            NSWorkspace.shared.open(url)
+        }
+    } label: {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.up.right").font(.system(size: 7))
+            Text("OPEN IN EUREKA").font(.system(size: 7, weight: .medium, design: .monospaced)).kerning(0.8)
+        }
+        .foregroundStyle(Hekla.dim)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 5)
+        .background(Hekla.card, in: RoundedRectangle(cornerRadius: 4))
+        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Hekla.cardHi.opacity(0.4), lineWidth: 0.5))
+    }
+    .buttonStyle(.plain)
+    .padding(.top, 4)
 }
 
 // MARK: - Bridge Debug
