@@ -13,14 +13,18 @@ for tool in xcodegen xcodebuild; do
   fi
 done
 
+# Build outside the repo so iCloud Desktop sync / Spotlight can't inject
+# xattrs into the .app bundle and break ad-hoc codesign.
+DERIVED="${TMPDIR:-/tmp}/notchpal-build"
+
 xcodegen generate
 
 xcodebuild \
   -project NotchPal.xcodeproj \
   -scheme NotchPal \
   -configuration Debug \
-  -derivedDataPath build \
+  -derivedDataPath "$DERIVED" \
   build
 
 pkill -x NotchPal 2>/dev/null || true
-open build/Build/Products/Debug/NotchPal.app
+open "$DERIVED/Build/Products/Debug/NotchPal.app"
