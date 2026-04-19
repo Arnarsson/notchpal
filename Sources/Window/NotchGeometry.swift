@@ -27,14 +27,15 @@ enum NotchGeometry {
     /// Per-agent detail sizing — tight to content.
     static func detailSize(for agentId: String) -> CGSize {
         let h: CGFloat = switch agentId {
-        case "email":    370
-        case "telegram": 310
-        case "briefing": 340
-        case "meeting":  320
-        case "chat":     310
-        case "memory":   330
-        case "log":      320
-        default:         200
+        case "email":       370
+        case "telegram":    310
+        case "briefing":    340
+        case "meeting":     320
+        case "chat":        310
+        case "memory":      330
+        case "log":         320
+        case "screenshare": 340
+        default:            200
         }
         return CGSize(width: 560, height: h)
     }

@@ -15,6 +15,7 @@
 		4EF0FB99C54C958C7453EB1D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679ADDD6FD318C4E4A59DBDF /* AppDelegate.swift */; };
 		61F0220D5CB94B71BFBE0ED0 /* NotchGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F211593C3B75CE4BD4B57C0 /* NotchGeometry.swift */; };
 		A5B7339FF5DB23FA990FDE61 /* NotchController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B69374B3E46DEF0559C5C6 /* NotchController.swift */; };
+		C81238B97341FE7D78585A03 /* ScreenShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 952C3C8C5C3F149CE3142F5E /* ScreenShareManager.swift */; };
 		CAA06084774326EC12151801 /* HeklaStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2DBDF1BB5663CB59DA3E900 /* HeklaStatusView.swift */; };
 		D94495642FC68846E64FC7DD /* DragReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83AC37A7D1999D8487EAF854 /* DragReceiver.swift */; };
 		E136DE12CB44D41C5B9613AD /* NotchPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AC9BC524B40ADD8AC0E1CB5 /* NotchPanel.swift */; };
@@ -41,6 +42,7 @@
 		7AC9BC524B40ADD8AC0E1CB5 /* NotchPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPanel.swift; sourceTree = "<group>"; };
 		7F211593C3B75CE4BD4B57C0 /* NotchGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchGeometry.swift; sourceTree = "<group>"; };
 		83AC37A7D1999D8487EAF854 /* DragReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragReceiver.swift; sourceTree = "<group>"; };
+		952C3C8C5C3F149CE3142F5E /* ScreenShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenShareManager.swift; sourceTree = "<group>"; };
 		9926E9987D1BF37EC7B6DDF3 /* AgentStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatus.swift; sourceTree = "<group>"; };
 		D2DBDF1BB5663CB59DA3E900 /* HeklaStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeklaStatusView.swift; sourceTree = "<group>"; };
 		E1B69374B3E46DEF0559C5C6 /* NotchController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchController.swift; sourceTree = "<group>"; };
@@ -63,6 +65,7 @@
 			children = (
 				83AC37A7D1999D8487EAF854 /* DragReceiver.swift */,
 				EB1C767C90E2E3C307886524 /* HoverTracker.swift */,
+				952C3C8C5C3F149CE3142F5E /* ScreenShareManager.swift */,
 			);
 			path = Interaction;
 			sourceTree = "<group>";
@@ -216,6 +219,7 @@
 				476949F400728913917FC143 /* NotchPalApp.swift in Sources */,
 				E136DE12CB44D41C5B9613AD /* NotchPanel.swift in Sources */,
 				3EEA9710F9BCB4ED5D53BF0E /* NotchRootView.swift in Sources */,
+				C81238B97341FE7D78585A03 /* ScreenShareManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

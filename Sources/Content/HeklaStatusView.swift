@@ -50,6 +50,7 @@ struct AgentDetailView: View {
                 case "chat": ChatDetailContent()
                 case "memory": MemoryDetailContent()
                 case "log": LogDetailContent()
+                case "screenshare": ScreenShareDetailContent()
                 default: GenericDetailContent(agent: agent)
                 }
             }
@@ -448,6 +449,131 @@ struct LogDetailContent: View {
         HStack(spacing: 3) {
             Text(n).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(Hekla.cream)
             Text(label).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
+        }
+    }
+}
+
+// MARK: - Screen Share
+
+struct ScreenShareDetailContent: View {
+    @Bindable var manager = ScreenShareManager.shared
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if manager.isSharing {
+                // Live preview thumbnail
+                if let frame = manager.latestFrame {
+                    Image(nsImage: frame)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Hekla.orange.opacity(0.3), lineWidth: 0.5)
+                        )
+                        .overlay(alignment: .topTrailing) {
+                            HStack(spacing: 4) {
+                                Circle().fill(.red).frame(width: 6, height: 6)
+                                Text("LIVE")
+                                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(.white)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(.black.opacity(0.6), in: Capsule())
+                            .padding(6)
+                        }
+                } else {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Hekla.card)
+                        .frame(height: 120)
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.6)
+                                .tint(Hekla.orange)
+                        )
+                }
+
+                // Stats
+                HStack(spacing: 16) {
+                    statBadge("\(manager.frameCount)", "frames")
+                    statBadge(String(format: "%.0f", manager.fps), "fps")
+                    statBadge("960×540", "resolution")
+                    Spacer()
+                }
+
+                // Stop button
+                Button {
+                    manager.stopSharing()
+                    updateAgentState()
+                } label: {
+                    Text("STOP SHARING")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .kerning(1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(.red.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                }
+                .buttonStyle(.plain)
+
+            } else {
+                // Not sharing — show start UI
+                VStack(spacing: 12) {
+                    Image(systemName: "rectangle.inset.filled.and.person.filled")
+                        .font(.system(size: 28))
+                        .foregroundStyle(Hekla.dim)
+
+                    Text("Share your screen with HEKLA")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Hekla.body)
+
+                    Text("The agent will see your screen at 1 FPS.\nNo audio. No data leaves your Mac.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Hekla.dim)
+                        .multilineTextAlignment(.center)
+
+                    Button {
+                        Task {
+                            await manager.startSharing()
+                            updateAgentState()
+                        }
+                    } label: {
+                        Text("START SHARING")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .kerning(1)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(Hekla.orange, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 8)
+            }
+        }
+    }
+
+    private func statBadge(_ value: String, _ label: String) -> some View {
+        HStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Hekla.cream)
+            Text(label)
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(Hekla.dim)
+        }
+    }
+
+    private func updateAgentState() {
+        if let agent = AgentRegistry.shared.agent(id: "screenshare") {
+            if manager.isSharing {
+                agent.state = .busy
+                agent.label = "Sharing · 960×540 · 1 FPS"
+            } else {
+                agent.state = .idle
+                agent.label = "Not sharing"
+            }
         }
     }
 }

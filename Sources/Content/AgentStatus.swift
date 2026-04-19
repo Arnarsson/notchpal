@@ -251,6 +251,10 @@ final class AgentRegistry {
         log.label = "47 today · last action 2m ago"
         log.state = .done
 
+        let screen = r.addAgent(id: "screenshare", name: "Screen Share", icon: "rectangle.inset.filled.and.person.filled")
+        screen.label = "Not sharing"
+        screen.state = .idle
+
         r.startProgressSimulation()
     }
 
