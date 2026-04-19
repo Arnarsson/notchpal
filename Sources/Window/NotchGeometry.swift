@@ -1,35 +1,32 @@
 import AppKit
 
-/// Pure geometry helpers for locating the notch and sizing the expanded panel.
-/// No side effects; easy to reason about and (later) unit-test.
 enum NotchGeometry {
 
-    /// Collapsed size: matches the physical notch when present, otherwise a synthetic handle.
-    /// The notch on 14"/16" M-series MacBooks is ~200pt wide x 32pt tall in points.
+    private static let collapsedPadding: CGFloat = 20
+
     static func collapsedSize(for screen: NSScreen) -> CGSize {
         if let notch = physicalNotchRect(in: screen) {
-            return CGSize(width: notch.width, height: notch.height)
+            // Wider than physical notch to fit flanking data points
+            return CGSize(width: notch.width + 120, height: notch.height + collapsedPadding)
         }
-        return CGSize(width: 180, height: 32) // synthetic handle for non-notch Macs
+        return CGSize(width: 300, height: 32 + collapsedPadding)
     }
 
-    /// Expanded size used during spike. Fixed for now; later read from preferences.
-    static let expandedSize = CGSize(width: 520, height: 160)
+    /// List view: sized to fit agents. Active agents get full rows (~46pt),
+    /// passive agents pair up in 2-col grid (~40pt per row).
+    /// Fixed expanded size — one size for all content. SwiftUI ScrollView
+    /// handles overflow. No dynamic resizing (causes NSHostingView constraint crashes).
+    static let expandedSize = CGSize(width: 560, height: 500)
 
-    /// Returns the frame (in screen coordinates) for the panel in its given state.
     static func frame(for state: NotchState, on screen: NSScreen) -> NSRect {
         switch state {
         case .collapsed:
-            let size = collapsedSize(for: screen)
-            return centeredTopFrame(size: size, in: screen)
+            return centeredTopFrame(size: collapsedSize(for: screen), in: screen)
         case .expanded:
             return centeredTopFrame(size: expandedSize, in: screen)
         }
     }
 
-    /// The physical notch rect in screen coordinates, if this screen has one.
-    /// Uses `auxiliaryTopLeftArea` and `auxiliaryTopRightArea`, which Apple exposes
-    /// specifically to let apps account for the notch. The gap between them is the notch.
     static func physicalNotchRect(in screen: NSScreen) -> NSRect? {
         guard let left = screen.auxiliaryTopLeftArea,
               let right = screen.auxiliaryTopRightArea else {
@@ -39,7 +36,6 @@ enum NotchGeometry {
         let notchRight = right.minX
         guard notchRight > notchLeft else { return nil }
         let width = notchRight - notchLeft
-        // Height: the auxiliary areas sit beside the notch, so their height == notch height.
         let height = left.height
         let y = screen.frame.maxY - height
         return NSRect(x: notchLeft, y: y, width: width, height: height)

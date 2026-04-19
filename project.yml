@@ -14,6 +14,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     ENABLE_HARDENED_RUNTIME: YES
     DEAD_CODE_STRIPPING: YES
+    SWIFT_OBJC_BRIDGING_HEADER: Sources/Window/NotchPal-Bridging-Header.h
 targets:
   NotchPal:
     type: application
@@ -28,11 +29,16 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSHumanReadableCopyright: "Spike — not for distribution"
+        NSMicrophoneUsageDescription: "NotchPal sends mic audio to OpenClaw for pair programming."
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
     entitlements:
       path: Sources/NotchPal.entitlements
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.automation.apple-events: true
+        com.apple.security.device.audio-input: true
   NotchPalTests:
     type: bundle.unit-test
     platform: macOS

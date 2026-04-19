@@ -2,8 +2,10 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var controller: NotchController?
+    private(set) var controller: NotchController?
     private var statusItem: NSStatusItem?
+
+    var notchController: NotchController? { controller }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Accessory = no Dock icon, no menu bar takeover. Spike is a HUD only.
@@ -15,6 +17,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         controller = NotchController()
         controller?.show()
+
+        // Only add screen share (local feature) — everything else comes from Eureka
+        let r = AgentRegistry.shared
+        r.agents.removeAll()
+        let screen = r.addAgent(id: "screenshare", name: "Screen Share", icon: "rectangle.inset.filled.and.person.filled")
+        screen.label = "Not sharing"
+        screen.state = .idle
+
+        // Connect to real Eureka API
+        EurekaBridge.shared.startPolling(interval: 5)
+
+        // Probe NotchChat API (feature-flagged)
+        Task { await NotchChatClient.shared.probe() }
 
         installQuitOnlyStatusItem()
     }
