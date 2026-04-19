@@ -18,7 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller = NotchController()
         controller?.show()
 
-        // Connect to Eureka/OpenClaw API
+        // Load all agents (demo + real)
+        AgentRegistry.debugAddDemo()
+
+        // Connect to Eureka/OpenClaw API — adds infrastructure agents on top
         EurekaBridge.shared.startPolling(interval: 5)
 
         installQuitOnlyStatusItem()

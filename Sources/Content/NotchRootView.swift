@@ -467,14 +467,10 @@ struct NotchRootView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 0) {
-            Text("EUREKA")
+            Text("HEKLA")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .foregroundStyle(Hekla.dim)
                 .kerning(0.5)
-            Circle().fill(bridge.isConnected ? Hekla.green : Color(hex: 0xFF5F57)).frame(width: 4, height: 4).padding(.leading, 4)
-            Text(bridge.isConnected ? "  Connected" : "  Offline")
-                .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(Hekla.dim)
             Spacer()
 
             // History button
@@ -494,13 +490,19 @@ struct NotchRootView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 8)
 
-            ForEach(["Ollama", "Gmail", "Telegram"], id: \.self) { service in
+            ForEach(["Ollama", "Gmail", "Telegram"], id: \.self) { svc in
                 HStack(spacing: 2) {
-                    Text(service).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Text(svc).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
                     Text("✓").font(.system(size: 8)).foregroundStyle(Hekla.green)
                 }
                 .padding(.leading, 6)
             }
+            HStack(spacing: 2) {
+                Text("Eureka").font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
+                Text(bridge.isConnected ? "✓" : "✗").font(.system(size: 8))
+                    .foregroundStyle(bridge.isConnected ? Hekla.green : Color(hex: 0xFF5F57))
+            }
+            .padding(.leading, 6)
         }
     }
 
