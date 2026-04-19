@@ -549,10 +549,11 @@ struct OpenClawDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             card("STATUS") {
-                row("URL", oc.baseURL)
+                row("Host", oc.sshHost)
+                row("Session", oc.sessionKey)
                 row("Available", oc.isAvailable ? "Yes" : "No")
-                row("Base", oc.baseURL)
                 if let err = oc.lastError { row("Error", err) }
+                if let reply = oc.lastReply { row("Last reply", String(reply.prefix(50))) }
             }
             Button { Task { await oc.probe() } } label: {
                 Text("RE-PROBE").font(.system(size: 8, weight: .medium, design: .monospaced))

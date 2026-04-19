@@ -445,12 +445,18 @@ final class EurekaBridge {
     // MARK: - Ask routing
 
     func sendCommandRouted(_ message: String) async -> String? {
-        // Try catchup first (needs AI credits)
+        // 1. Prefer direct Eureka chat via OpenClaw ACP (same as Telegram)
+        if OpenClawBridge.shared.isAvailable {
+            if let reply = await OpenClawBridge.shared.chat(message) {
+                return reply
+            }
+        }
+        // 2. Try Eureka API catchup
         if let result = await sendCommand(message),
            !result.contains("credit balance is too low") {
             return result
         }
-        // Fallback: search Eureka's memory
+        // 3. Fallback: search memory
         return await searchMemory(message)
     }
 
@@ -489,90 +495,72 @@ final class EurekaBridge {
 
 // MARK: - Feature 5: OpenClaw Agent Bridge (text chat)
 
-/// OpenClaw is an internal Eureka capability, not a separate service.
-/// Wraps /api/eureka/* and /api/v2/agents/* endpoints.
+/// Talks to Eureka (the real one) via SSH + openclaw acp CLI.
+/// Same runtime path as Telegram — same personality, same session.
 @Observable
 final class OpenClawBridge {
     static let shared = OpenClawBridge()
 
-    var baseURL: String { EurekaBridge.shared.baseURL }
+    let sshHost = "100.83.83.58"
+    let sessionKey = "agent:main:notch:sven"
+    let clawPath = "~/.local/share/mise/shims/openclaw"
+
     var isAvailable = false
-    var agentEndpointsFound = false
     var lastError: String?
+    var lastReply: String?
 
-    private let session: URLSession
-
-    private init() {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
-        self.session = URLSession(configuration: config)
-    }
+    private init() {}
 
     func probe() async {
-        // Check Eureka agent endpoints
-        guard let url = URL(string: "\(baseURL)/api/eureka/status") else {
-            markUnavailable("No URL")
-            return
-        }
-        do {
-            let (data, response) = try await session.data(from: url)
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-
-            if code == 401 {
-                markUnavailable("Auth required")
-                return
-            }
-            guard (200..<300).contains(code) else {
-                markUnavailable("HTTP \(code)")
-                return
-            }
-
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                isAvailable = json["online"] as? Bool ?? false
-                agentEndpointsFound = true
-            }
-        } catch {
-            markUnavailable(error.localizedDescription)
-            return
-        }
-
-        // Also check /api/v2/agents/registry
-        if let data = try? await session.data(from: URL(string: "\(baseURL)/api/v2/agents/registry")!).0,
-           let _ = try? JSONSerialization.jsonObject(with: data) {
-            agentEndpointsFound = true
-        }
+        // Check if SSH + openclaw is reachable
+        let result = await sshCommand("echo ok")
+        isAvailable = result?.trimmingCharacters(in: .whitespacesAndNewlines) == "ok"
 
         let r = AgentRegistry.shared
-        let agent = r.agent(id: "openclaw") ?? r.addAgent(id: "openclaw", name: "Agent Bridge", icon: "sparkle")
+        let agent = r.agent(id: "openclaw") ?? r.addAgent(id: "openclaw", name: "Eureka Chat", icon: "sparkle")
         agent.state = isAvailable ? .idle : .error
-        agent.label = isAvailable ? "Eureka agent ready" : (lastError ?? "Unavailable")
-        agent.sourceEndpoint = "/api/eureka/status"
+        agent.label = isAvailable ? "Ready · \(sessionKey)" : (lastError ?? "SSH unreachable")
+        agent.sourceEndpoint = "ssh://\(sshHost)"
         agent.lastUpdated = Date()
     }
 
-    private func markUnavailable(_ reason: String) {
-        isAvailable = false
-        agentEndpointsFound = false
-        lastError = reason
+    /// Send a message to Eureka via openclaw acp and get the reply.
+    func chat(_ text: String) async -> String? {
+        guard isAvailable else { return "Eureka offline" }
+
+        // Use openclaw acp to send a message and capture the response
+        // The acp client sends the message into the session and streams the reply
+        let escaped = text.replacingOccurrences(of: "'", with: "'\\''")
+        let cmd = "echo '\(escaped)' | \(clawPath) acp --session \(sessionKey) --pipe 2>/dev/null | head -100"
+
+        let result = await sshCommand(cmd, timeout: 30)
+        if let reply = result, !reply.isEmpty {
+            lastReply = reply
+            return reply
+        }
+        return "No response from Eureka"
     }
 
-    func chat(_ text: String) async -> String? {
-        guard isAvailable else { return nil }
-        guard let url = URL(string: "\(baseURL)/api/catchup/") else { return nil }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["topic": text])
+    private func sshCommand(_ command: String, timeout: Int = 5) async -> String? {
+        await withCheckedContinuation { cont in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+            process.arguments = ["-o", "ConnectTimeout=\(timeout)", "-o", "StrictHostKeyChecking=no", sshHost, command]
 
-        do {
-            let (data, _) = try await session.data(for: request)
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return json["summary"] as? String ?? json["response"] as? String
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8)
+                cont.resume(returning: output)
+            } catch {
+                lastError = error.localizedDescription
+                cont.resume(returning: nil)
             }
-            return String(data: data, encoding: .utf8)
-        } catch {
-            lastError = error.localizedDescription
-            return nil
         }
     }
 }
