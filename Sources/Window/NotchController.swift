@@ -17,9 +17,7 @@ final class NotchController {
     var showHistory = false
     var focusedIndex: Int = -1  // -1 = no focus
 
-    var selectedAgent: AgentStatus? {
-        didSet { resizeForContent() }
-    }
+    var selectedAgent: AgentStatus?
 
     private var panel: NotchPanel?
     private var animating = false
@@ -81,7 +79,6 @@ final class NotchController {
 
     func toggleHistory() {
         showHistory.toggle()
-        resizeForContent()
     }
 
     func selectAgent(_ agent: AgentStatus) {
@@ -93,7 +90,7 @@ final class NotchController {
     }
 
     func resizePanel() {
-        resizeForContent()
+        // No-op: fixed expanded size, SwiftUI handles content layout
     }
 
     func didReceiveDrop(_ url: URL) {
@@ -101,13 +98,13 @@ final class NotchController {
         showDropSuggestions = true
         AgentRegistry.shared.suggestForDrop(url)
         state = .expanded
-        resizeForContent()
+        // no-op: fixed expanded size
     }
 
     func dismissDropSuggestions() {
         showDropSuggestions = false
         AgentRegistry.shared.clearDropSuggestions()
-        resizeForContent()
+        // no-op: fixed expanded size
     }
 
     // MARK: - Global hotkey (⌘Space)
@@ -170,7 +167,7 @@ final class NotchController {
                     self.deselectAgent()
                 } else if self.showHistory {
                     self.showHistory = false
-                    self.resizeForContent()
+                    // fixed size, no resize needed
                 } else {
                     self.toggle()
                 }
@@ -188,68 +185,17 @@ final class NotchController {
         }
     }
 
-    // MARK: - Dynamic sizing
-
-    private func resizeForContent() {
-        guard state == .expanded else { return }
-        guard let panel, let screen = NSScreen.main else { return }
-
-        let size: CGSize
-        if let agent = selectedAgent {
-            size = NotchGeometry.detailSize(for: agent.id)
-        } else if showHistory {
-            let historyCount = min(AgentRegistry.shared.notificationHistory.count, 8)
-            size = CGSize(width: 560, height: CGFloat(80 + historyCount * 32))
-        } else if showDropSuggestions {
-            size = CGSize(width: 560, height: 180)
-        } else {
-            let registry = AgentRegistry.shared
-            let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }.count
-            let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }.count
-            size = NotchGeometry.listSize(activeCount: active, passiveCount: passive)
-        }
-
-        let target = NotchGeometry.frame(size: size, on: screen)
-        animating = true
-        panel.setFrame(target, display: true)
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
-            self.animating = false
-        }
-    }
-
     // MARK: - Animation
 
     private func animatePanelFrame(to state: NotchState) {
         guard let panel, let screen = NSScreen.main else { return }
 
-        let target: NSRect
-        if state == .expanded {
-            if showHistory {
-                let hc = min(AgentRegistry.shared.notificationHistory.count, 8)
-                target = NotchGeometry.frame(size: CGSize(width: 560, height: CGFloat(80 + hc * 32)), on: screen)
-            } else if showDropSuggestions {
-                target = NotchGeometry.frame(size: CGSize(width: 560, height: 180), on: screen)
-            } else {
-                let registry = AgentRegistry.shared
-                let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }.count
-                let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }.count
-                let size = NotchGeometry.listSize(activeCount: active, passiveCount: passive)
-                target = NotchGeometry.frame(size: size, on: screen)
-            }
-        } else {
-            target = NotchGeometry.frame(for: .collapsed, on: screen)
-        }
+        // Fixed sizes — no dynamic resizing. SwiftUI ScrollView handles content.
+        let target = NotchGeometry.frame(for: state, on: screen)
 
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let expanding = (state == .expanded)
-        let duration = reduceMotion ? 0.1 : (expanding ? 0.4 : 0.25)
-
-        // Direct frame set — NSAnimationContext + NSHostingView causes constraint
-        // crashes during display cycle (EXC_CRASH in _postWindowNeedsUpdateConstraints).
         animating = true
         panel.setFrame(target, display: true)
-        // Brief delay before allowing collapse to prevent hover flicker
+        let expanding = (state == .expanded)
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(expanding ? 400 : 100))
             self.animating = false

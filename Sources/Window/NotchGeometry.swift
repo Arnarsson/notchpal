@@ -14,48 +14,17 @@ enum NotchGeometry {
 
     /// List view: sized to fit agents. Active agents get full rows (~46pt),
     /// passive agents pair up in 2-col grid (~40pt per row).
-    static func listSize(activeCount: Int, passiveCount: Int) -> CGSize {
-        let header: CGFloat = 36 + 24         // notch clearance + header
-        let activeH = CGFloat(activeCount) * 44
-        let passiveRows = ceil(CGFloat(passiveCount) / 2)
-        let passiveH = passiveRows * 36
-        let gap: CGFloat = (activeCount > 0 && passiveCount > 0) ? 6 : 0
-        let bottom: CGFloat = 24              // bottom bar
-        let h = header + activeH + gap + passiveH + bottom
-        return CGSize(width: 560, height: max(h, 110))
-    }
-
-    /// Per-agent detail sizing — tight to content.
-    static func detailSize(for agentId: String) -> CGSize {
-        let h: CGFloat = switch agentId {
-        case "email":       370
-        case "calendar":    300
-        case "issues":      350
-        case "insights":    330
-        case "activity":    320
-        case "triage":      300
-        case "daily3":      220
-        case "meeting":     320
-        case "pair":        460
-        case "openclaw":    260
-        case "screenshare": 340
-        default:            250
-        }
-        return CGSize(width: 560, height: h)
-    }
+    /// Fixed expanded size — one size for all content. SwiftUI ScrollView
+    /// handles overflow. No dynamic resizing (causes NSHostingView constraint crashes).
+    static let expandedSize = CGSize(width: 560, height: 420)
 
     static func frame(for state: NotchState, on screen: NSScreen) -> NSRect {
         switch state {
         case .collapsed:
             return centeredTopFrame(size: collapsedSize(for: screen), in: screen)
         case .expanded:
-            // Default list size — controller will call resizePanel for specifics
-            return centeredTopFrame(size: listSize(activeCount: 3, passiveCount: 4), in: screen)
+            return centeredTopFrame(size: expandedSize, in: screen)
         }
-    }
-
-    static func frame(size: CGSize, on screen: NSScreen) -> NSRect {
-        centeredTopFrame(size: size, in: screen)
     }
 
     static func physicalNotchRect(in screen: NSScreen) -> NSRect? {
