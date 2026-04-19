@@ -549,9 +549,10 @@ struct OpenClawDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             card("STATUS") {
-                row("Host", oc.sshHost)
+                row("Gateway", oc.gatewayURL)
                 row("Session", oc.sessionKey)
                 row("Available", oc.isAvailable ? "Yes" : "No")
+                row("Streaming", oc.streaming ? "Yes" : "No")
                 if let err = oc.lastError { row("Error", err) }
                 if let reply = oc.lastReply { row("Last reply", String(reply.prefix(50))) }
             }
