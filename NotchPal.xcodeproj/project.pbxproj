@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1D01B76E0FEA61B0B8BE7E2F /* AgentStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9926E9987D1BF37EC7B6DDF3 /* AgentStatus.swift */; };
+		2B9BCC40E533566B8CACCFA1 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = 5BF1AE67E3D58B4C73DDA8FA /* ObjCExceptionCatcher.m */; };
 		3A862158AAEE88905F4E11AF /* EndpointResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D52139F12CE41A78F324AC /* EndpointResolver.swift */; };
 		3EEA9710F9BCB4ED5D53BF0E /* NotchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431E1AB602D04A738B086C18 /* NotchRootView.swift */; };
 		476949F400728913917FC143 /* NotchPalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B1A7A4AE6F1781A4EC68B3 /* NotchPalApp.swift */; };
@@ -34,13 +35,16 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		17DD90667FD7804CCDBA3B86 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		1966B2CB5ED96BCD1FBB7C3E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		209D2DCACCE068D1627E3804 /* NotchPal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotchPal.entitlements; sourceTree = "<group>"; };
 		22EF304F749C6C29333B11E5 /* NotchPal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotchPal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A7759170A8C62313B02C989 /* NotchPal-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NotchPal-Bridging-Header.h"; sourceTree = "<group>"; };
 		3634230B449CBAC773B382C2 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		38D52139F12CE41A78F324AC /* EndpointResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndpointResolver.swift; sourceTree = "<group>"; };
 		38F9BF53D33AC2E04CB371A0 /* EurekaBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EurekaBridge.swift; sourceTree = "<group>"; };
 		431E1AB602D04A738B086C18 /* NotchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchRootView.swift; sourceTree = "<group>"; };
+		5BF1AE67E3D58B4C73DDA8FA /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
 		65B1A7A4AE6F1781A4EC68B3 /* NotchPalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPalApp.swift; sourceTree = "<group>"; };
 		679ADDD6FD318C4E4A59DBDF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7AC9BC524B40ADD8AC0E1CB5 /* NotchPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPanel.swift; sourceTree = "<group>"; };
@@ -90,7 +94,10 @@
 			children = (
 				E1B69374B3E46DEF0559C5C6 /* NotchController.swift */,
 				7F211593C3B75CE4BD4B57C0 /* NotchGeometry.swift */,
+				2A7759170A8C62313B02C989 /* NotchPal-Bridging-Header.h */,
 				7AC9BC524B40ADD8AC0E1CB5 /* NotchPanel.swift */,
+				17DD90667FD7804CCDBA3B86 /* ObjCExceptionCatcher.h */,
+				5BF1AE67E3D58B4C73DDA8FA /* ObjCExceptionCatcher.m */,
 			);
 			path = Window;
 			sourceTree = "<group>";
@@ -227,6 +234,7 @@
 				476949F400728913917FC143 /* NotchPalApp.swift in Sources */,
 				E136DE12CB44D41C5B9613AD /* NotchPanel.swift in Sources */,
 				3EEA9710F9BCB4ED5D53BF0E /* NotchRootView.swift in Sources */,
+				2B9BCC40E533566B8CACCFA1 /* ObjCExceptionCatcher.m in Sources */,
 				C81238B97341FE7D78585A03 /* ScreenShareManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -345,6 +353,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/Window/NotchPal-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
 			};
@@ -406,6 +415,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OBJC_BRIDGING_HEADER = "Sources/Window/NotchPal-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
 			};
