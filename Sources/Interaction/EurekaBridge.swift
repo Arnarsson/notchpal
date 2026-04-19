@@ -470,13 +470,15 @@ final class EurekaBridge {
 
 // MARK: - Feature 5: OpenClaw Agent Bridge (text chat)
 
+/// OpenClaw is an internal Eureka capability, not a separate service.
+/// Wraps /api/eureka/* and /api/v2/agents/* endpoints.
 @Observable
 final class OpenClawBridge {
     static let shared = OpenClawBridge()
 
-    var baseURL: String = ProcessInfo.processInfo.environment["OPENCLAW_URL"] ?? "http://localhost:8787"
+    var baseURL: String { EurekaBridge.shared.baseURL }
     var isAvailable = false
-    var conversationID: String?
+    var agentEndpointsFound = false
     var lastError: String?
 
     private let session: URLSession
@@ -488,39 +490,65 @@ final class OpenClawBridge {
     }
 
     func probe() async {
-        guard let url = URL(string: "\(baseURL)/health") else { isAvailable = false; return }
+        // Check Eureka agent endpoints
+        guard let url = URL(string: "\(baseURL)/api/eureka/status") else {
+            markUnavailable("No URL")
+            return
+        }
         do {
-            let (_, response) = try await session.data(from: url)
-            isAvailable = (response as? HTTPURLResponse)?.statusCode == 200
+            let (data, response) = try await session.data(from: url)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            if code == 401 {
+                markUnavailable("Auth required")
+                return
+            }
+            guard (200..<300).contains(code) else {
+                markUnavailable("HTTP \(code)")
+                return
+            }
+
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                isAvailable = json["online"] as? Bool ?? false
+                agentEndpointsFound = true
+            }
         } catch {
-            isAvailable = false
-            lastError = error.localizedDescription
+            markUnavailable(error.localizedDescription)
+            return
         }
 
-        // Register agent
+        // Also check /api/v2/agents/registry
+        if let data = try? await session.data(from: URL(string: "\(baseURL)/api/v2/agents/registry")!).0,
+           let _ = try? JSONSerialization.jsonObject(with: data) {
+            agentEndpointsFound = true
+        }
+
         let r = AgentRegistry.shared
-        let agent = r.agent(id: "openclaw") ?? r.addAgent(id: "openclaw", name: "OpenClaw", icon: "sparkle")
+        let agent = r.agent(id: "openclaw") ?? r.addAgent(id: "openclaw", name: "Agent Bridge", icon: "sparkle")
         agent.state = isAvailable ? .idle : .error
-        agent.label = isAvailable ? "Ready" : "Unreachable"
-        agent.sourceEndpoint = "/health"
+        agent.label = isAvailable ? "Eureka agent ready" : (lastError ?? "Unavailable")
+        agent.sourceEndpoint = "/api/eureka/status"
         agent.lastUpdated = Date()
     }
 
+    private func markUnavailable(_ reason: String) {
+        isAvailable = false
+        agentEndpointsFound = false
+        lastError = reason
+    }
+
     func chat(_ text: String) async -> String? {
-        guard let url = URL(string: "\(baseURL)/v1/chat") else { return nil }
+        guard isAvailable else { return nil }
+        guard let url = URL(string: "\(baseURL)/api/catchup/") else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        var body: [String: Any] = ["message": text]
-        if let cid = conversationID { body["conversation_id"] = cid }
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["topic": text])
 
         do {
             let (data, _) = try await session.data(for: request)
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                conversationID = json["conversation_id"] as? String ?? conversationID
-                return json["response"] as? String ?? json["text"] as? String
+                return json["summary"] as? String ?? json["response"] as? String
             }
             return String(data: data, encoding: .utf8)
         } catch {
@@ -528,19 +556,20 @@ final class OpenClawBridge {
             return nil
         }
     }
-
-    func reset() {
-        conversationID = nil
-    }
 }
 
 // MARK: - Feature 6: Pair Session (screen + voice)
+// Feature-flagged: set ENABLE_PAIR_SESSION=true env var to activate.
 
 import CryptoKit
 
 @Observable
 final class PairSession {
     static let shared = PairSession()
+
+    static var isEnabled: Bool {
+        ProcessInfo.processInfo.environment["ENABLE_PAIR_SESSION"] == "true"
+    }
 
     enum Status: String { case idle, connecting, live, degraded, reconnecting, ended }
     var status: Status = .idle
@@ -589,6 +618,7 @@ final class PairSession {
     private init() {}
 
     func start() async {
+        guard Self.isEnabled else { return }
         guard status == .idle || status == .ended else { return }
         status = .connecting
         startTime = Date()
@@ -608,7 +638,7 @@ final class PairSession {
     }
 
     private func connect() async {
-        let base = OpenClawBridge.shared.baseURL
+        let base = EurekaBridge.shared.baseURL
             .replacingOccurrences(of: "http://", with: "ws://")
             .replacingOccurrences(of: "https://", with: "wss://")
         guard let url = URL(string: "\(base)/v1/pair") else {

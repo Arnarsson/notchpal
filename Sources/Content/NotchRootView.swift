@@ -184,24 +184,26 @@ struct NotchRootView: View {
 
                 Spacer()
 
-                // Pair button
-                Button {
-                    if PairSession.shared.status == .idle || PairSession.shared.status == .ended {
-                        Task { await PairSession.shared.start() }
-                        controller.selectAgent(AgentRegistry.shared.agent(id: "pair") ?? AgentStatus(id: "pair", agent: "Pair"))
+                // Pair button (feature-flagged)
+                if PairSession.isEnabled {
+                    Button {
+                        if PairSession.shared.status == .idle || PairSession.shared.status == .ended {
+                            Task { await PairSession.shared.start() }
+                            controller.selectAgent(AgentRegistry.shared.agent(id: "pair") ?? AgentStatus(id: "pair", agent: "Pair"))
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Circle().fill(PairSession.shared.status == .live ? Hekla.green : Hekla.dim).frame(width: 4, height: 4)
+                            Text(PairSession.shared.status == .live ? PairSession.shared.elapsed : "Pair")
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        }
+                        .foregroundStyle(Hekla.cream)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(PairSession.shared.status == .live ? Hekla.green.opacity(0.15) : Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
                     }
-                } label: {
-                    HStack(spacing: 3) {
-                        Circle().fill(PairSession.shared.status == .live ? Hekla.green : Hekla.dim).frame(width: 4, height: 4)
-                        Text(PairSession.shared.status == .live ? PairSession.shared.elapsed : "Pair")
-                            .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    }
-                    .foregroundStyle(Hekla.cream)
-                    .padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(PairSession.shared.status == .live ? Hekla.green.opacity(0.15) : Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
+                    .buttonStyle(.plain)
+                    .disabled(!OpenClawBridge.shared.isAvailable && PairSession.shared.status == .idle)
                 }
-                .buttonStyle(.plain)
-                .disabled(!OpenClawBridge.shared.isAvailable && PairSession.shared.status == .idle)
 
                 // Quick action icons
                 quickAction("bolt.fill") { Task { await bridge.spawnWorker() } }

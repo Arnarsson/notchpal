@@ -551,7 +551,7 @@ struct OpenClawDetailView: View {
             card("STATUS") {
                 row("URL", oc.baseURL)
                 row("Available", oc.isAvailable ? "Yes" : "No")
-                if let cid = oc.conversationID { row("Conversation", String(cid.prefix(12)) + "…") }
+                row("Base", oc.baseURL)
                 if let err = oc.lastError { row("Error", err) }
             }
             Button { Task { await oc.probe() } } label: {
