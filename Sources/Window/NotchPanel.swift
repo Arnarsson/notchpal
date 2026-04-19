@@ -68,9 +68,9 @@ final class StableHostingWrapper: NSView {
         hostingView?.frame = bounds
     }
 
-    // Pass scroll events through to the hosting view
-    override func scrollWheel(with event: NSEvent) {
-        hostingView?.scrollWheel(with: event)
+    // Don't intercept scroll — let it pass through to subviews naturally
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        hostingView?.hitTest(convert(point, to: hostingView))
     }
 
     override class var requiresConstraintBasedLayout: Bool { false }
