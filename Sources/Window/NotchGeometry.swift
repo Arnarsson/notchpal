@@ -8,7 +8,9 @@ enum NotchGeometry {
     /// The notch on 14"/16" M-series MacBooks is ~200pt wide x 32pt tall in points.
     /// Extra height below the physical notch so the collapsed panel has a hittable
     /// surface for drag-and-drop. The notch itself is behind the display cutout.
-    private static let collapsedPadding: CGFloat = 12
+    /// PRD §Known hazards recommends 40pt strip; we use 20pt as a balance between
+    /// hit area and visual intrusiveness.
+    private static let collapsedPadding: CGFloat = 20
 
     static func collapsedSize(for screen: NSScreen) -> CGSize {
         if let notch = physicalNotchRect(in: screen) {
@@ -17,8 +19,8 @@ enum NotchGeometry {
         return CGSize(width: 180, height: 32 + collapsedPadding)
     }
 
-    /// Expanded size used during spike. Fixed for now; later read from preferences.
-    static let expandedSize = CGSize(width: 520, height: 160)
+    /// Expanded size. Tall enough for 3 agent rows + a drop file row.
+    static let expandedSize = CGSize(width: 520, height: 200)
 
     /// Returns the frame (in screen coordinates) for the panel in its given state.
     static func frame(for state: NotchState, on screen: NSScreen) -> NSRect {
