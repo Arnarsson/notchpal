@@ -17,6 +17,7 @@ extension Color {
 final class AgentStatus: Identifiable {
     let id: String
     var agent: String
+    var icon: String  // SF Symbol name
     var label: String
     var state: State = .idle
     var progress: Double?
@@ -46,9 +47,10 @@ final class AgentStatus: Identifiable {
         }
     }
 
-    init(id: String, agent: String, label: String = "idle", state: State = .idle, progress: Double? = nil) {
+    init(id: String, agent: String, icon: String = "circle.fill", label: String = "idle", state: State = .idle, progress: Double? = nil) {
         self.id = id
         self.agent = agent
+        self.icon = icon
         self.label = label
         self.state = state
         self.progress = progress
@@ -107,9 +109,9 @@ final class AgentRegistry {
     }
 
     @discardableResult
-    func addAgent(id: String, name: String) -> AgentStatus {
+    func addAgent(id: String, name: String, icon: String = "circle.fill") -> AgentStatus {
         if let existing = agent(id: id) { return existing }
-        let status = AgentStatus(id: id, agent: name)
+        let status = AgentStatus(id: id, agent: name, icon: icon)
         agents.append(status)
         return status
     }
@@ -213,34 +215,34 @@ final class AgentRegistry {
         let r = shared
         r.agents.removeAll()
 
-        let briefing = r.addAgent(id: "briefing", name: "Briefing")
+        let briefing = r.addAgent(id: "briefing", name: "Briefing", icon: "sun.horizon.fill")
         briefing.label = "Delivered 06:45 · 3 meetings"
         briefing.state = .done
 
-        let meeting = r.addAgent(id: "meeting", name: "Meeting Prep")
+        let meeting = r.addAgent(id: "meeting", name: "Meeting Prep", icon: "calendar.badge.clock")
         meeting.label = "Prepping. Ready in ~90s."
         meeting.state = .busy
         meeting.progress = 0.55
 
-        let email = r.addAgent(id: "email", name: "Emails")
+        let email = r.addAgent(id: "email", name: "Emails", icon: "envelope.fill")
         email.label = "Last poll 42s ago"
         email.state = .busy
         email.progress = nil
 
-        let telegram = r.addAgent(id: "telegram", name: "Telegram")
+        let telegram = r.addAgent(id: "telegram", name: "Telegram", icon: "paperplane.fill")
         telegram.label = "Reply to Peder · confidence 0.71"
         telegram.state = .attention
 
-        let chat = r.addAgent(id: "chat", name: "Chat")
+        let chat = r.addAgent(id: "chat", name: "Chat", icon: "bubble.left.fill")
         chat.label = "Ready. Web search enabled."
         chat.state = .idle
 
-        let memory = r.addAgent(id: "memory", name: "Memory")
+        let memory = r.addAgent(id: "memory", name: "Memory", icon: "brain")
         memory.label = "Embedding. 326 in queue."
         memory.state = .busy
         memory.progress = 0.22
 
-        let log = r.addAgent(id: "log", name: "Log")
+        let log = r.addAgent(id: "log", name: "Log", icon: "list.bullet.rectangle")
         log.label = "47 today · last action 2m ago"
         log.state = .done
 

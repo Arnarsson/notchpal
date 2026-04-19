@@ -446,20 +446,18 @@ struct AgentCard: View {
 
     var body: some View {
         HStack(spacing: compact ? 6 : 8) {
-            // Dot
+            // Agent icon with status color
             ZStack {
                 if status.state != .idle && status.state != .done {
                     Circle()
-                        .fill(status.state.color.opacity(0.2))
-                        .frame(width: 14, height: 14)
-                        .blur(radius: 4)
+                        .fill(status.state.color.opacity(0.15))
+                        .frame(width: compact ? 20 : 26, height: compact ? 20 : 26)
                 }
-                Circle()
-                    .fill(status.state.color)
-                    .frame(width: compact ? 6 : 8, height: compact ? 6 : 8)
-                    .shadow(color: status.state.color.opacity(0.5), radius: 3)
+                Image(systemName: status.icon)
+                    .font(.system(size: compact ? 9 : 11))
+                    .foregroundStyle(status.state == .idle ? Hekla.dim : status.state.color)
             }
-            .frame(width: compact ? 14 : 18, height: compact ? 14 : 18)
+            .frame(width: compact ? 20 : 26, height: compact ? 20 : 26)
 
             VStack(alignment: .leading, spacing: compact ? 1 : 2) {
                 HStack(spacing: 6) {
@@ -493,7 +491,6 @@ struct AgentCard: View {
                     )
             }
 
-            // Chevron
             Image(systemName: "chevron.right")
                 .font(.system(size: 7, weight: .semibold))
                 .foregroundStyle(Hekla.dim.opacity(0.5))
@@ -510,6 +507,34 @@ struct AgentCard: View {
                 .animation(.easeInOut(duration: 0.3), value: status.justCompleted)
         )
         .contentShape(Rectangle())
+        .contextMenu {
+            if status.state == .busy {
+                Button("Pause") {
+                    status.state = .idle
+                    status.label = "Paused"
+                    status.progress = nil
+                }
+            }
+            if status.state == .idle || status.state == .done {
+                Button("Restart") {
+                    status.state = .busy
+                    status.label = "Restarting…"
+                    status.progress = 0.0
+                }
+            }
+            if status.state == .attention {
+                Button("Approve") {
+                    AgentRegistry.shared.approveAgent(id: status.id, action: "send")
+                }
+                Button("Dismiss") {
+                    AgentRegistry.shared.approveAgent(id: status.id, action: "reject")
+                }
+            }
+            Divider()
+            Button("Remove") {
+                AgentRegistry.shared.removeAgent(id: status.id)
+            }
+        }
     }
 }
 

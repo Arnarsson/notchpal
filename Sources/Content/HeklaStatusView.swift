@@ -10,7 +10,7 @@ struct AgentDetailView: View {
         VStack(spacing: 0) {
             Spacer().frame(height: 36)
 
-            // Back + status
+            // Back + agent name + status
             HStack(spacing: 8) {
                 Button(action: onBack) {
                     HStack(spacing: 4) {
@@ -20,6 +20,13 @@ struct AgentDetailView: View {
                     .foregroundStyle(Hekla.dim)
                 }
                 .buttonStyle(.plain)
+
+                Image(systemName: agent.icon)
+                    .font(.system(size: 10))
+                    .foregroundStyle(agent.state.color)
+                Text(agent.agent)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Hekla.cream)
 
                 Spacer()
 
