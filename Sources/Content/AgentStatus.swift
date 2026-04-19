@@ -142,11 +142,20 @@ final class AgentRegistry {
 
     /// Generate file drop suggestions based on active agents.
     func suggestForDrop(_ url: URL) {
-        dropSuggestions = [
-            DropSuggestion(agentId: "chat", agentName: "Chat", action: "Summarize", icon: "text.magnifyingglass"),
-            DropSuggestion(agentId: "memory", agentName: "Memory", action: "Index", icon: "brain"),
-            DropSuggestion(agentId: "meeting", agentName: "Meeting Prep", action: "Attach", icon: "paperclip"),
-        ]
+        let ext = url.pathExtension.lowercased()
+        if ["png", "jpg", "jpeg", "webp"].contains(ext) {
+            dropSuggestions = [
+                DropSuggestion(agentId: "art", agentName: "Art Core", action: "Style Transfer", icon: "paintbrush.pointed.fill"),
+                DropSuggestion(agentId: "animation", agentName: "Animation Core", action: "Add to Sprite", icon: "film.stack"),
+                DropSuggestion(agentId: "data", agentName: "Data Core", action: "Index", icon: "cylinder.split.1x2"),
+            ]
+        } else {
+            dropSuggestions = [
+                DropSuggestion(agentId: "data", agentName: "Data Core", action: "Index", icon: "cylinder.split.1x2"),
+                DropSuggestion(agentId: "story", agentName: "Story Core", action: "Add Context", icon: "book.fill"),
+                DropSuggestion(agentId: "coach", agentName: "Coach Core", action: "Analyze", icon: "person.wave.2.fill"),
+            ]
+        }
     }
 
     func clearDropSuggestions() {
@@ -171,9 +180,9 @@ final class AgentRegistry {
         progressTimer?.cancel()
         progressTimer = Task { @MainActor in
             let activityPhrases: [String: [String]] = [
-                "email": ["Polling Gmail…", "214 seen · 2 new priority", "Archiving newsletters…", "Last poll 12s ago", "Drafting reply…"],
-                "meeting": ["Pulling Linear tickets…", "Scanning calendar…", "Drafting agenda §2…", "Linking Notion docs…", "Formatting prep notes…"],
-                "memory": ["Embedding batch 14/18…", "326 → 304 in queue", "Indexing email threads…", "Ollama latency 38ms", "Compacting vectors…"],
+                "art": ["SDXL · Loading LoRA weights…", "Generating keyframe 4/8…", "ComfyUI · Style transfer pass…", "Particle map extraction…", "Upscaling 2× with ESRGAN…"],
+                "animation": ["RIFE · Interpolating frames…", "Building sprite sheet…", "24 → 18 frames remaining", "Generating metadata JSON…", "Overlay particle data…"],
+                "data": ["ChromaDB · Indexing new docs…", "Embedding batch 12/14…", "Ollama · 38ms latency", "4,812 → 4,826 vectors", "RAG query cache warm"],
             ]
             var tick = 0
             while !Task.isCancelled {
@@ -220,40 +229,37 @@ final class AgentRegistry {
         let r = shared
         r.agents.removeAll()
 
-        let briefing = r.addAgent(id: "briefing", name: "Briefing", icon: "sun.horizon.fill")
-        briefing.label = "Delivered 06:45 · 3 meetings"
-        briefing.state = .done
+        // OpenClaw Cores
+        let data = r.addAgent(id: "data", name: "Data Core", icon: "cylinder.split.1x2")
+        data.label = "ChromaDB · 4,812 vectors indexed"
+        data.state = .done
 
-        let meeting = r.addAgent(id: "meeting", name: "Meeting Prep", icon: "calendar.badge.clock")
-        meeting.label = "Prepping. Ready in ~90s."
-        meeting.state = .busy
-        meeting.progress = 0.55
+        let art = r.addAgent(id: "art", name: "Art Core", icon: "paintbrush.pointed.fill")
+        art.label = "SDXL · Generating keyframe batch 3/8"
+        art.state = .busy
+        art.progress = 0.38
 
-        let email = r.addAgent(id: "email", name: "Emails", icon: "envelope.fill")
-        email.label = "Last poll 42s ago"
-        email.state = .busy
-        email.progress = nil
+        let animation = r.addAgent(id: "animation", name: "Animation Core", icon: "film.stack")
+        animation.label = "RIFE interpolation · 24 frames queued"
+        animation.state = .busy
+        animation.progress = 0.62
 
-        let telegram = r.addAgent(id: "telegram", name: "Telegram", icon: "paperplane.fill")
-        telegram.label = "Reply to Peder · confidence 0.71"
-        telegram.state = .attention
+        let coach = r.addAgent(id: "coach", name: "Coach Core", icon: "person.wave.2.fill")
+        coach.label = "Arnold · Nemotron 8B · listening"
+        coach.state = .idle
 
-        let chat = r.addAgent(id: "chat", name: "Chat", icon: "bubble.left.fill")
-        chat.label = "Ready. Web search enabled."
-        chat.state = .idle
+        let story = r.addAgent(id: "story", name: "Story Core", icon: "book.fill")
+        story.label = "Chapter 3 draft needs review"
+        story.state = .attention
 
-        let memory = r.addAgent(id: "memory", name: "Memory", icon: "brain")
-        memory.label = "Embedding. 326 in queue."
-        memory.state = .busy
-        memory.progress = 0.22
-
-        let log = r.addAgent(id: "log", name: "Log", icon: "list.bullet.rectangle")
-        log.label = "47 today · last action 2m ago"
-        log.state = .done
-
+        // Infrastructure
         let screen = r.addAgent(id: "screenshare", name: "Screen Share", icon: "rectangle.inset.filled.and.person.filled")
         screen.label = "Not sharing"
         screen.state = .idle
+
+        let log = r.addAgent(id: "log", name: "Log", icon: "list.bullet.rectangle")
+        log.label = "142 actions today"
+        log.state = .done
 
         r.startProgressSimulation()
     }

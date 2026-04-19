@@ -43,14 +43,13 @@ struct AgentDetailView: View {
             // Agent-specific content
             ScrollView(.vertical, showsIndicators: false) {
                 switch agent.id {
-                case "email": EmailsDetailContent()
-                case "telegram": TelegramDetailContent()
-                case "briefing": BriefingDetailContent()
-                case "meeting": MeetingDetailContent()
-                case "chat": ChatDetailContent()
-                case "memory": MemoryDetailContent()
-                case "log": LogDetailContent()
+                case "data": DataCoreDetailContent()
+                case "art": ArtCoreDetailContent()
+                case "animation": AnimationCoreDetailContent()
+                case "coach": CoachCoreDetailContent()
+                case "story": StoryCoreDetailContent()
                 case "screenshare": ScreenShareDetailContent()
+                case "log": LogDetailContent()
                 default: GenericDetailContent(agent: agent)
                 }
             }
@@ -59,7 +58,339 @@ struct AgentDetailView: View {
     }
 }
 
-// MARK: - Emails
+// MARK: - Data Core
+
+struct DataCoreDetailContent: View {
+    private let collections = [
+        ("knowledge", "4,812 vectors", "Markdown docs + RAG chunks"),
+        ("conversations", "1,204 vectors", "Chat history embeddings"),
+        ("assets", "342 vectors", "Image metadata + captions"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            section("CHROMADB COLLECTIONS") {
+                ForEach(Array(collections.enumerated()), id: \.offset) { _, c in
+                    HStack {
+                        Text(c.0).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(Hekla.cream)
+                        Spacer()
+                        Text(c.1).font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.orange)
+                    }
+                    Text(c.2).font(.system(size: 8)).foregroundStyle(Hekla.dim)
+                }
+            }
+
+            section("RECENT QUERIES") {
+                queryRow("pixie pony art style", "0.91", "12ms")
+                queryRow("arnold coaching prompts", "0.87", "8ms")
+                queryRow("chapter 3 narrative arc", "0.84", "15ms")
+            }
+
+            section("OLLAMA") {
+                HStack {
+                    Text("Model").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("nomic-embed-text").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("Latency").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("38ms p50").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.green)
+                }
+            }
+        }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1.5)
+            content()
+        }
+        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+    }
+
+    private func queryRow(_ query: String, _ score: String, _ latency: String) -> some View {
+        HStack {
+            Text("▸").font(.system(size: 8)).foregroundStyle(Hekla.dim)
+            Text(query).font(.system(size: 9)).foregroundStyle(Hekla.body).lineLimit(1)
+            Spacer()
+            Text(score).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.orange)
+            Text(latency).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
+        }
+    }
+}
+
+// MARK: - Art Core
+
+struct ArtCoreDetailContent: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            section("PIPELINE") {
+                pipelineStep("1", "SDXL + LoRA", "Keyframe generation", true)
+                pipelineStep("2", "Style Transfer", "Apply character LoRA", false)
+                pipelineStep("3", "Particle Maps", "Extract depth + edges", false)
+                pipelineStep("4", "Upscale", "ESRGAN 2×", false)
+            }
+
+            section("CURRENT BATCH") {
+                HStack {
+                    Text("Keyframes").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("3/8 complete").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.orange)
+                }
+                HStack {
+                    Text("LoRA").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("pixie-pony-v2.safetensors").font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("VRAM").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("6.2 / 8.0 GB").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.yellow)
+                }
+            }
+
+            section("COMFYUI") {
+                HStack {
+                    Text("Status").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Circle().fill(Hekla.green).frame(width: 5, height: 5)
+                    Text("Running").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.green)
+                }
+            }
+        }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1.5)
+            content()
+        }
+        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+    }
+
+    private func pipelineStep(_ num: String, _ name: String, _ desc: String, _ active: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(num).font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(active ? .black : Hekla.dim)
+                .frame(width: 14, height: 14)
+                .background(active ? Hekla.orange : Hekla.cardHi, in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(.system(size: 9, weight: .semibold)).foregroundStyle(active ? Hekla.cream : Hekla.dim)
+                Text(desc).font(.system(size: 8)).foregroundStyle(Hekla.dim)
+            }
+            Spacer()
+            if active {
+                Text("ACTIVE").font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(0.6)
+            }
+        }
+    }
+}
+
+// MARK: - Animation Core
+
+struct AnimationCoreDetailContent: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            section("RIFE INTERPOLATION") {
+                HStack {
+                    Text("Input frames").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("8 keyframes").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("Output").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("24 fps · 96 frames").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("Progress").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("62%").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange)
+                }
+            }
+
+            section("SPRITE SHEET") {
+                HStack {
+                    Text("Grid").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("8×12 · 512px cells").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("Metadata").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("sprite-meta.json").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+            }
+
+            section("PARTICLE OVERLAY") {
+                ForEach(["depth_map.png", "edge_map.png", "particle_data.json"], id: \.self) { file in
+                    HStack {
+                        Text("▸").font(.system(size: 8)).foregroundStyle(Hekla.dim)
+                        Text(file).font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.body)
+                        Spacer()
+                        Text("✓").foregroundStyle(Hekla.green).font(.system(size: 8))
+                    }
+                }
+            }
+        }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1.5)
+            content()
+        }
+        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+    }
+}
+
+// MARK: - Coach Core ("Arnold")
+
+struct CoachCoreDetailContent: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Arnold").font(.system(size: 13, weight: .regular, design: .serif)).foregroundStyle(Hekla.cream)
+                Text("Nemotron 8B Q4").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+            }
+
+            section("MODEL") {
+                HStack {
+                    Text("Engine").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("Ollama · local").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("Context").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("8,192 tokens").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("RAG").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Circle().fill(Hekla.green).frame(width: 5, height: 5)
+                    Text("Connected").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.green)
+                }
+            }
+
+            section("CAPABILITIES") {
+                capRow("Conversational coaching", true)
+                capRow("Emotion tagging", true)
+                capRow("TTS output (Piper)", true)
+                capRow("WebSocket API", true)
+            }
+
+            section("SESSION") {
+                HStack {
+                    Text("Status").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("Idle · awaiting input").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                }
+                HStack {
+                    Text("Sessions today").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("3").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+            }
+        }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1.5)
+            content()
+        }
+        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+    }
+
+    private func capRow(_ name: String, _ active: Bool) -> some View {
+        HStack {
+            Text("▸").font(.system(size: 8)).foregroundStyle(Hekla.dim)
+            Text(name).font(.system(size: 9)).foregroundStyle(Hekla.body)
+            Spacer()
+            Text(active ? "✓" : "–").font(.system(size: 8)).foregroundStyle(active ? Hekla.green : Hekla.dim)
+        }
+    }
+}
+
+// MARK: - Story Core
+
+struct StoryCoreDetailContent: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            section("CHAPTER 3 — DRAFT") {
+                Text("The forest opened into a clearing where light pooled like water. Pixie felt the warmth on her mane and knew—this was the place Arnold had described.")
+                    .font(.system(size: 10, design: .serif))
+                    .foregroundStyle(Hekla.body)
+                    .italic()
+                    .lineLimit(4)
+            }
+
+            section("NEEDS REVIEW") {
+                ForEach(["Tone check: paragraph 4 feels too dark for age group", "Illustration prompt for clearing scene needs approval", "Character name 'Bramble' conflicts with Ch.1 NPC"], id: \.self) { item in
+                    HStack(alignment: .top, spacing: 6) {
+                        Circle().fill(Hekla.yellow).frame(width: 5, height: 5).padding(.top, 3)
+                        Text(item).font(.system(size: 9)).foregroundStyle(Hekla.body)
+                    }
+                }
+            }
+
+            HStack(spacing: 6) {
+                approvalBtn("Reject", Hekla.dim)
+                approvalBtn("Edit", Hekla.cardHi)
+                approvalBtn("Approve", Hekla.orange)
+            }
+
+            section("PROGRESS") {
+                HStack {
+                    Text("Chapters").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("2 done · 1 in review · 5 remaining").font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+                HStack {
+                    Text("Illustrations").font(.system(size: 9, design: .monospaced)).foregroundStyle(Hekla.dim)
+                    Spacer()
+                    Text("6 generated · 2 pending").font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.cream)
+                }
+            }
+        }
+    }
+
+    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(Hekla.orange).kerning(1.5)
+            content()
+        }
+        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Hekla.card))
+    }
+
+    private func approvalBtn(_ title: String, _ bg: Color) -> some View {
+        Button {
+            if title == "Approve" {
+                AgentRegistry.shared.approveAgent(id: "story", action: "send")
+            }
+        } label: {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(bg == Hekla.orange ? .white : Hekla.cream)
+                .kerning(1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(bg, in: RoundedRectangle(cornerRadius: 4))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// ═══════════════════════════════════════════════════
+// Legacy HEKLA views below — kept for reference
+// ═══════════════════════════════════════════════════
 
 struct EmailsDetailContent: View {
     private let emails: [(initial: String, from: String, subject: String, preview: String, time: String, tag: String, handled: String?)] = [

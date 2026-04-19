@@ -155,7 +155,7 @@ struct NotchRootView: View {
 
             // Header
             HStack(alignment: .center) {
-                Text("HEKLA")
+                Text("OPENCLAW")
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Hekla.orange)
                     .kerning(2)
@@ -367,7 +367,7 @@ struct NotchRootView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(Hekla.dim)
 
-                TextField("Ask HEKLA anything…", text: $askText)
+                TextField("Ask OpenClaw…", text: $askText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Hekla.cream)
@@ -411,11 +411,11 @@ struct NotchRootView: View {
         askText = ""
         // Simulate a response
         let responses = [
-            "Thursday 18:40 out, back Sunday. Hotel still unbooked.",
-            "Acme renewal at 14:30. §4 is the sticking point — they want 2× ACV cap.",
-            "326 items in the embedding queue. Should clear in ~4 minutes.",
-            "Last email from Peder was at 09:14 about Thursday dinner.",
-            "3 meetings today. The Acme one at 14:30 is the one that matters.",
+            "Art Core is on keyframe 4/8. VRAM at 6.2 GB — no swap needed.",
+            "RIFE interpolation at 62%. Sprite sheet will be ready in ~3 minutes.",
+            "ChromaDB has 4,826 vectors. Last RAG query scored 0.91 on 'pixie pony art style'.",
+            "Arnold is idle. 3 coaching sessions today, last one at 14:22.",
+            "Story Core has Chapter 3 in review. Tone flag on paragraph 4.",
         ]
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             askResponse = responses[abs(question.hashValue) % responses.count]
@@ -473,7 +473,7 @@ struct NotchRootView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 8)
 
-            ForEach(["Ollama", "Gmail", "Telegram"], id: \.self) { service in
+            ForEach(["Ollama", "ComfyUI", "ChromaDB"], id: \.self) { service in
                 HStack(spacing: 2) {
                     Text(service).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
                     Text("✓").font(.system(size: 8)).foregroundStyle(Hekla.green)
