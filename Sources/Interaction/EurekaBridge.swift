@@ -7,7 +7,7 @@ import AppKit
 final class EurekaBridge {
     static let shared = EurekaBridge()
 
-    var baseURL = "http://127.0.0.1:8888"
+    var baseURL = "https://platanvejomarchy.tail12cdd5.ts.net"
     var isConnected = false
     var lastPoll: Date?
     var error: String?
