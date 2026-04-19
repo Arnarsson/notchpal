@@ -1,15 +1,7 @@
 import AppKit
 
-/// Pure geometry helpers for locating the notch and sizing the expanded panel.
-/// No side effects; easy to reason about and (later) unit-test.
 enum NotchGeometry {
 
-    /// Collapsed size: matches the physical notch when present, otherwise a synthetic handle.
-    /// The notch on 14"/16" M-series MacBooks is ~200pt wide x 32pt tall in points.
-    /// Extra height below the physical notch so the collapsed panel has a hittable
-    /// surface for drag-and-drop. The notch itself is behind the display cutout.
-    /// PRD §Known hazards recommends 40pt strip; we use 20pt as a balance between
-    /// hit area and visual intrusiveness.
     private static let collapsedPadding: CGFloat = 20
 
     static func collapsedSize(for screen: NSScreen) -> CGSize {
@@ -19,23 +11,48 @@ enum NotchGeometry {
         return CGSize(width: 180, height: 32 + collapsedPadding)
     }
 
-    /// Expanded size. Wide and compact like NotchNook.
-    static let expandedSize = CGSize(width: 580, height: 140)
+    /// List view: sized to fit agents. Active agents get full rows (~46pt),
+    /// passive agents pair up in 2-col grid (~40pt per row).
+    static func listSize(activeCount: Int, passiveCount: Int) -> CGSize {
+        let header: CGFloat = 36 + 24         // notch clearance + header
+        let activeH = CGFloat(activeCount) * 44
+        let passiveRows = ceil(CGFloat(passiveCount) / 2)
+        let passiveH = passiveRows * 36
+        let gap: CGFloat = (activeCount > 0 && passiveCount > 0) ? 6 : 0
+        let bottom: CGFloat = 24              // bottom bar
+        let h = header + activeH + gap + passiveH + bottom
+        return CGSize(width: 560, height: max(h, 110))
+    }
 
-    /// Returns the frame (in screen coordinates) for the panel in its given state.
+    /// Per-agent detail sizing — tight to content.
+    static func detailSize(for agentId: String) -> CGSize {
+        let h: CGFloat = switch agentId {
+        case "email":    370
+        case "telegram": 310
+        case "briefing": 340
+        case "meeting":  320
+        case "chat":     310
+        case "memory":   330
+        case "log":      320
+        default:         200
+        }
+        return CGSize(width: 560, height: h)
+    }
+
     static func frame(for state: NotchState, on screen: NSScreen) -> NSRect {
         switch state {
         case .collapsed:
-            let size = collapsedSize(for: screen)
-            return centeredTopFrame(size: size, in: screen)
+            return centeredTopFrame(size: collapsedSize(for: screen), in: screen)
         case .expanded:
-            return centeredTopFrame(size: expandedSize, in: screen)
+            // Default list size — controller will call resizePanel for specifics
+            return centeredTopFrame(size: listSize(activeCount: 3, passiveCount: 4), in: screen)
         }
     }
 
-    /// The physical notch rect in screen coordinates, if this screen has one.
-    /// Uses `auxiliaryTopLeftArea` and `auxiliaryTopRightArea`, which Apple exposes
-    /// specifically to let apps account for the notch. The gap between them is the notch.
+    static func frame(size: CGSize, on screen: NSScreen) -> NSRect {
+        centeredTopFrame(size: size, in: screen)
+    }
+
     static func physicalNotchRect(in screen: NSScreen) -> NSRect? {
         guard let left = screen.auxiliaryTopLeftArea,
               let right = screen.auxiliaryTopRightArea else {
@@ -45,7 +62,6 @@ enum NotchGeometry {
         let notchRight = right.minX
         guard notchRight > notchLeft else { return nil }
         let width = notchRight - notchLeft
-        // Height: the auxiliary areas sit beside the notch, so their height == notch height.
         let height = left.height
         let y = screen.frame.maxY - height
         return NSRect(x: notchLeft, y: y, width: width, height: height)

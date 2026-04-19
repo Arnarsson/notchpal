@@ -1,9 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Owns the NotchPanel lifecycle and drives state transitions.
-/// State is the single source of truth for collapsed vs expanded; SwiftUI reads it
-/// through the environment, and the panel frame is animated in lockstep.
 @Observable
 final class NotchController {
 
@@ -14,9 +11,11 @@ final class NotchController {
         }
     }
 
-    /// The file most recently dropped onto the notch. In the spike, we just show it;
-    /// post-spike this becomes the "give HEKLA context" pipeline.
     var lastDroppedFile: URL?
+
+    var selectedAgent: AgentStatus? {
+        didSet { resizeForContent() }
+    }
 
     private var panel: NotchPanel?
     private var animating = false
@@ -25,10 +24,7 @@ final class NotchController {
 
     func show() {
         guard panel == nil else { return }
-        guard let screen = NSScreen.main else {
-            // Main-screen-only is a hard constraint for the spike.
-            return
-        }
+        guard let screen = NSScreen.main else { return }
 
         let panel = NotchPanel()
         let hosting = NSHostingView(rootView: NotchRootView(controller: self))
@@ -45,17 +41,24 @@ final class NotchController {
         panel = nil
     }
 
-    // MARK: - Intents (called from SwiftUI / interaction layer)
+    // MARK: - Intents
 
     func hoverBegan() {
         state = .expanded
     }
 
     func hoverEnded() {
-        // Don't collapse while a frame animation is in flight — the expanding
-        // panel shifts the tracking area, which can falsely fire mouseExited.
         guard !animating else { return }
+        selectedAgent = nil
         state = .collapsed
+    }
+
+    func selectAgent(_ agent: AgentStatus) {
+        selectedAgent = agent
+    }
+
+    func deselectAgent() {
+        selectedAgent = nil
     }
 
     func didReceiveDrop(_ url: URL) {
@@ -63,11 +66,48 @@ final class NotchController {
         state = .expanded
     }
 
+    // MARK: - Dynamic sizing
+
+    private func resizeForContent() {
+        guard state == .expanded else { return }
+        guard let panel, let screen = NSScreen.main else { return }
+
+        let size: CGSize
+        if let agent = selectedAgent {
+            size = NotchGeometry.detailSize(for: agent.id)
+        } else {
+            let registry = AgentRegistry.shared
+            let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }.count
+            let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }.count
+            size = NotchGeometry.listSize(activeCount: active, passiveCount: passive)
+        }
+
+        let target = NotchGeometry.frame(size: size, on: screen)
+        animating = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 1.0, 0.3, 1.0)
+            panel.animator().setFrame(target, display: true)
+        }, completionHandler: { [weak self] in
+            self?.animating = false
+        })
+    }
+
     // MARK: - Animation
 
     private func animatePanelFrame(to state: NotchState) {
         guard let panel, let screen = NSScreen.main else { return }
-        let target = NotchGeometry.frame(for: state, on: screen)
+
+        let target: NSRect
+        if state == .expanded {
+            let registry = AgentRegistry.shared
+            let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }.count
+            let passive = registry.agents.filter { $0.state == .idle || $0.state == .done }.count
+            let size = NotchGeometry.listSize(activeCount: active, passiveCount: passive)
+            target = NotchGeometry.frame(size: size, on: screen)
+        } else {
+            target = NotchGeometry.frame(for: .collapsed, on: screen)
+        }
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         let expanding = (state == .expanded)
