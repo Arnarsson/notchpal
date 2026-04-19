@@ -211,13 +211,11 @@ final class NotchController {
 
         let target = NotchGeometry.frame(size: size, on: screen)
         animating = true
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.3
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 1.0, 0.3, 1.0)
-            panel.animator().setFrame(target, display: true)
-        }, completionHandler: { [weak self] in
-            self?.animating = false
-        })
+        panel.setFrame(target, display: true)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            self.animating = false
+        }
     }
 
     // MARK: - Animation
@@ -247,15 +245,14 @@ final class NotchController {
         let expanding = (state == .expanded)
         let duration = reduceMotion ? 0.1 : (expanding ? 0.4 : 0.25)
 
+        // Direct frame set — NSAnimationContext + NSHostingView causes constraint
+        // crashes during display cycle (EXC_CRASH in _postWindowNeedsUpdateConstraints).
         animating = true
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = duration
-            ctx.timingFunction = expanding
-                ? CAMediaTimingFunction(controlPoints: 0.2, 1.0, 0.3, 1.0)
-                : CAMediaTimingFunction(name: .easeIn)
-            panel.animator().setFrame(target, display: true)
-        }, completionHandler: { [weak self] in
-            self?.animating = false
-        })
+        panel.setFrame(target, display: true)
+        // Brief delay before allowing collapse to prevent hover flicker
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(expanding ? 400 : 100))
+            self.animating = false
+        }
     }
 }
