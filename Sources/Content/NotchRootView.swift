@@ -571,6 +571,20 @@ struct AgentCard: View {
                     )
             }
 
+            // Quick stop for screen share
+            if status.id == "screenshare" && ScreenShareManager.shared.isSharing {
+                Button {
+                    ScreenShareManager.shared.stopSharing()
+                    status.state = .idle
+                    status.label = "Not sharing"
+                } label: {
+                    Image(systemName: "stop.circle.fill")
+                        .font(.system(size: compact ? 12 : 14))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+            }
+
             Image(systemName: "chevron.right")
                 .font(.system(size: 7, weight: .semibold))
                 .foregroundStyle(Hekla.dim.opacity(0.5))
