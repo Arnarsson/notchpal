@@ -235,35 +235,34 @@ struct NotchRootView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            // Prioritized cards — max 4, scored by importance
-            let scored = prioritizedAgents
-            VStack(spacing: 5) {
-                ForEach(scored.prefix(showAllAgents ? 20 : 4)) { agent in
-                    AgentCard(status: agent, compact: false, focused: false)
-                        .onTapGesture { controller.selectAgent(agent) }
+            // Scrollable agent list
+            ScrollView(.vertical, showsIndicators: false) {
+                let scored = prioritizedAgents
+                VStack(spacing: 5) {
+                    ForEach(scored.prefix(showAllAgents ? 20 : 4)) { agent in
+                        AgentCard(status: agent, compact: false, focused: false)
+                            .onTapGesture { controller.selectAgent(agent) }
+                    }
+                }
+                .scaleEffect(dropTargeted ? 0.97 : 1.0)
+                .animation(.easeInOut(duration: 0.2), value: dropTargeted)
+
+                // See all / collapse toggle
+                if registry.agents.count > 4 {
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            showAllAgents.toggle()
+                        }
+                    } label: {
+                        Text(showAllAgents ? "Show less" : "See all \(registry.agents.count) agents")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Hekla.dim)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12)
-            .scaleEffect(dropTargeted ? 0.97 : 1.0)
-            .animation(.easeInOut(duration: 0.2), value: dropTargeted)
-
-            // See all / collapse toggle
-            if registry.agents.count > 4 {
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        showAllAgents.toggle()
-                    }
-                    controller.resizePanel()
-                } label: {
-                    Text(showAllAgents ? "Show less" : "See all \(registry.agents.count) agents")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Hekla.dim)
-                        .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
-            }
-
-            Spacer(minLength: 4)
 
             bottomBar
                 .padding(.horizontal, 14)
