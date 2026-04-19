@@ -490,19 +490,19 @@ struct NotchRootView: View {
             .buttonStyle(.plain)
             .padding(.trailing, 8)
 
-            ForEach(["Ollama", "Gmail", "Telegram"], id: \.self) { svc in
-                HStack(spacing: 2) {
-                    Text(svc).font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
-                    Text("✓").font(.system(size: 8)).foregroundStyle(Hekla.green)
-                }
-                .padding(.leading, 6)
-            }
+            // No mock service checks — only real Eureka status
             HStack(spacing: 2) {
                 Text("Eureka").font(.system(size: 8, design: .monospaced)).foregroundStyle(Hekla.dim)
                 Text(bridge.isConnected ? "✓" : "✗").font(.system(size: 8))
                     .foregroundStyle(bridge.isConnected ? Hekla.green : Color(hex: 0xFF5F57))
             }
             .padding(.leading, 6)
+            if !bridge.aiOnline {
+                Text("AI offline")
+                    .font(.system(size: 7, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color(hex: 0xFF5F57))
+                    .padding(.leading, 6)
+            }
         }
     }
 
@@ -575,10 +575,25 @@ struct AgentCard: View {
                             .foregroundStyle(Hekla.orange)
                     }
                 }
-                Text(status.label)
-                    .font(.system(size: compact ? 8 : 9))
-                    .foregroundStyle(Hekla.dim)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(status.label)
+                        .font(.system(size: compact ? 8 : 9))
+                        .foregroundStyle(Hekla.dim)
+                        .lineLimit(1)
+                    if !compact, status.lastUpdated != nil {
+                        Text("· \(status.lastUpdatedText)")
+                            .font(.system(size: 7, design: .monospaced))
+                            .foregroundStyle(Hekla.dim.opacity(0.6))
+                    }
+                    if status.isStale {
+                        Text("STALE")
+                            .font(.system(size: 6, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 1)
+                            .background(Hekla.yellow, in: RoundedRectangle(cornerRadius: 2))
+                    }
+                }
             }
 
             Spacer(minLength: 0)

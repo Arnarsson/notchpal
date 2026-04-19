@@ -1,8 +1,8 @@
 import Foundation
 import AppKit
 
-/// Bridges NotchPal to the real Eureka API via SSH tunnel.
-/// Every agent card maps to a real endpoint — no mock data.
+/// Bridges NotchPal to real Eureka API. No mock data. No inferred summaries.
+/// Every card shows raw timestamped facts from a known endpoint.
 @Observable
 final class EurekaBridge {
     static let shared = EurekaBridge()
@@ -11,6 +11,8 @@ final class EurekaBridge {
     var isConnected = false
     var lastPoll: Date?
     var error: String?
+    var aiOnline = false
+    var chatEndpoint: String?  // discovered from OpenAPI
 
     private var pollTimer: Task<Void, Never>?
     private let session: URLSession
@@ -26,6 +28,7 @@ final class EurekaBridge {
     func startPolling(interval: TimeInterval = 5) {
         pollTimer?.cancel()
         pollTimer = Task { @MainActor in
+            await discoverChatEndpoint()
             while !Task.isCancelled {
                 await poll()
                 let wait: TimeInterval = consecutiveFailures >= 10 ? 30 : (consecutiveFailures >= 3 ? 15 : interval)
@@ -34,8 +37,27 @@ final class EurekaBridge {
         }
     }
 
-    func stopPolling() {
-        pollTimer?.cancel()
+    func stopPolling() { pollTimer?.cancel() }
+
+    // MARK: - Chat endpoint discovery
+
+    private func discoverChatEndpoint() async {
+        guard let data = await fetch("/openapi.json") else { return }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let paths = json["paths"] as? [String: Any] else { return }
+
+        let keywords = ["compose", "chat", "query", "ask", "command", "catchup"]
+        let candidates = paths.keys.filter { path in
+            let lower = path.lowercased()
+            return keywords.contains { lower.contains($0) }
+        }
+        // Prefer POST endpoints, shortest path
+        let postCandidates = candidates.filter { path in
+            guard let methods = paths[path] as? [String: Any] else { return false }
+            return methods.keys.contains("post")
+        }.sorted { $0.count < $1.count }
+
+        chatEndpoint = postCandidates.first ?? candidates.sorted(by: { $0.count < $1.count }).first
     }
 
     // MARK: - Poll
@@ -55,17 +77,27 @@ final class EurekaBridge {
         await pollIssues()
         await pollActivity()
         await pollInsights()
+        await pollBridge()
         lastPoll = Date()
     }
 
-    // MARK: - Eureka core status
+    // MARK: - Helpers
+
+    private func stamp(_ agent: AgentStatus, endpoint: String) {
+        agent.lastUpdated = Date()
+        agent.sourceEndpoint = endpoint
+    }
+
+    // MARK: - Eureka
 
     private func pollEureka() async {
-        guard let data = await fetch("/api/eureka/status") else { return }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        let ep = "/api/eureka/status"
+        guard let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
         let r = AgentRegistry.shared
         let agent = r.agent(id: "eureka") ?? r.addAgent(id: "eureka", name: "Eureka", icon: "bolt.fill")
+        stamp(agent, endpoint: ep)
 
         let online = json["online"] as? Bool ?? false
         let model = json["model"] as? String ?? "?"
@@ -76,44 +108,51 @@ final class EurekaBridge {
             agent.label = "\(workers.count) workers · \(model)"
         } else if online {
             agent.state = .idle
-            agent.label = "Online · \(model)"
+            agent.label = "\(model)"
         } else {
             agent.state = .error
             agent.label = "Offline"
         }
+
+        // Check AI credits by trying a lightweight call
+        aiOnline = online // will refine below
     }
 
     // MARK: - Email
 
     private func pollEmail() async {
-        guard let data = await fetch("/api/email/categories/counts") else { return }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let ep = "/api/email/categories/counts"
+        guard let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let categories = json["categories"] as? [[String: Any]] else { return }
 
         let r = AgentRegistry.shared
         let agent = r.agent(id: "email") ?? r.addAgent(id: "email", name: "Email", icon: "envelope.fill")
+        stamp(agent, endpoint: ep)
 
         let priority = categories.first { ($0["name"] as? String) == "priority" }
-        let unread = priority?["unread"] as? Int ?? 0
-        let total = categories.reduce(0) { $0 + (($1["unread"] as? Int) ?? 0) }
+        let priorityUnread = priority?["unread"] as? Int ?? 0
+        let totalUnread = categories.reduce(0) { $0 + (($1["unread"] as? Int) ?? 0) }
 
-        agent.state = unread > 10 ? .attention : (total > 0 ? .busy : .idle)
-        agent.label = "\(unread) priority · \(total) total unread"
+        agent.state = priorityUnread > 10 ? .attention : (totalUnread > 0 ? .busy : .idle)
+        agent.label = "\(priorityUnread) priority · \(totalUnread) total unread"
     }
 
     // MARK: - Calendar
 
     private func pollCalendar() async {
-        guard let data = await fetch("/api/calendar/events/upcoming") else { return }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let ep = "/api/calendar/events/upcoming"
+        guard let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let events = json["events"] as? [[String: Any]] else { return }
 
         let r = AgentRegistry.shared
         let agent = r.agent(id: "calendar") ?? r.addAgent(id: "calendar", name: "Calendar", icon: "calendar")
+        stamp(agent, endpoint: ep)
 
         if events.isEmpty {
             agent.state = .idle
-            agent.label = "No upcoming events"
+            agent.label = "No upcoming"
         } else {
             let next = events.first?["summary"] as? String ?? "Event"
             agent.state = .done
@@ -121,84 +160,110 @@ final class EurekaBridge {
         }
     }
 
-    // MARK: - Issues/Projects
+    // MARK: - Issues
 
     private func pollIssues() async {
-        guard let data = await fetch("/api/issues") else { return }
+        let ep = "/api/issues"
+        guard let data = await fetch(ep) else { return }
 
         let r = AgentRegistry.shared
         let agent = r.agent(id: "issues") ?? r.addAgent(id: "issues", name: "Issues", icon: "list.bullet.rectangle")
+        stamp(agent, endpoint: ep)
 
         if let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
             let todo = items.filter { ($0["status"] as? String) == "todo" }.count
             let backlog = items.filter { ($0["status"] as? String) == "backlog" }.count
             agent.state = todo > 0 ? .busy : .idle
-            agent.label = "\(todo) todo · \(backlog) backlog · \(items.count) total"
-        } else if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let items = json["issues"] as? [[String: Any]] {
-            agent.state = items.isEmpty ? .idle : .busy
-            agent.label = "\(items.count) issues"
+            agent.label = "\(todo) todo · \(backlog) backlog"
         }
     }
 
     // MARK: - Activity
 
     private func pollActivity() async {
-        guard let data = await fetch("/api/activity/summary") else { return }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        let ep = "/api/activity/summary"
+        guard let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
         let r = AgentRegistry.shared
         let agent = r.agent(id: "activity") ?? r.addAgent(id: "activity", name: "Activity", icon: "eye.fill")
+        stamp(agent, endpoint: ep)
 
         let captures = json["total_captures"] as? Int ?? 0
         let hours = json["active_hours"] as? Int ?? 0
-
-        agent.state = captures > 0 ? .done : .idle
-        agent.label = "\(captures) captures · \(hours)h active today"
+        agent.state = .done
+        agent.label = "\(captures) captures · \(hours)h active"
     }
 
-    // MARK: - Insights (stuck items)
+    // MARK: - Insights
 
     private func pollInsights() async {
-        guard let data = await fetch("/api/insights/suggested-actions") else { return }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let ep = "/api/insights/suggested-actions"
+        guard let data = await fetch(ep),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let actions = json["actions"] as? [[String: Any]] else { return }
 
         let r = AgentRegistry.shared
         let agent = r.agent(id: "insights") ?? r.addAgent(id: "insights", name: "Insights", icon: "lightbulb.fill")
+        stamp(agent, endpoint: ep)
 
         let high = actions.filter { ($0["priority"] as? String) == "high" }
         if high.isEmpty {
             agent.state = .idle
-            agent.label = "No actions needed"
+            agent.label = "Nothing flagged"
         } else {
-            let first = high.first?["title"] as? String ?? ""
-            // Trim "Escalate: " prefix
-            let clean = first.hasPrefix("Escalate: ") ? String(first.dropFirst(10)) : first
+            let title = (high.first?["title"] as? String ?? "")
+                .replacingOccurrences(of: "Escalate: ", with: "")
             agent.state = .attention
-            agent.label = "\(high.count) flagged · \(clean)"
+            agent.label = "\(high.count) flagged · \(title)"
         }
     }
 
-    // MARK: - Ask (command)
+    // MARK: - Direct Bridge panel
+
+    private func pollBridge() async {
+        let r = AgentRegistry.shared
+        let agent = r.agent(id: "bridge") ?? r.addAgent(id: "bridge", name: "Direct Bridge", icon: "antenna.radiowaves.left.and.right")
+        stamp(agent, endpoint: chatEndpoint ?? "none")
+
+        if let ep = chatEndpoint {
+            agent.state = .idle
+            agent.label = "Chat: POST \(ep)"
+        } else {
+            agent.state = .error
+            agent.label = "No direct chat endpoint found"
+        }
+    }
+
+    // MARK: - Send command
 
     func sendCommand(_ message: String) async -> String? {
-        // Try catchup
-        guard let url = URL(string: "\(baseURL)/api/catchup/") else { return nil }
+        let ep = chatEndpoint ?? "/api/catchup/"
+        guard let url = URL(string: "\(baseURL)\(ep)") else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["topic": message])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["topic": message, "message": message, "query": message])
 
         do {
-            let (data, _) = try await session.data(for: request)
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let summary = json["summary"] as? String {
-                return summary
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                return "Error: HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)"
+            }
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                // Check for AI credit error
+                if let summary = json["summary"] as? String, summary.contains("credit balance is too low") {
+                    aiOnline = false
+                    return "AI offline — Anthropic credits exhausted. Live data cards still active."
+                }
+                return json["summary"] as? String
+                    ?? json["response"] as? String
+                    ?? json["text"] as? String
+                    ?? String(data: data, encoding: .utf8)
             }
             return String(data: data, encoding: .utf8)
         } catch {
-            return nil
+            return "Error: \(error.localizedDescription)"
         }
     }
 

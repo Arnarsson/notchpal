@@ -22,6 +22,22 @@ final class AgentStatus: Identifiable {
     var state: State = .idle
     var progress: Double?
     var justCompleted = false
+    var lastUpdated: Date?
+    var sourceEndpoint: String?
+
+    var isStale: Bool {
+        guard let last = lastUpdated else { return true }
+        return Date().timeIntervalSince(last) > 7 * 24 * 3600 // 7 days
+    }
+
+    var lastUpdatedText: String {
+        guard let last = lastUpdated else { return "never" }
+        let interval = Date().timeIntervalSince(last)
+        if interval < 60 { return "just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return "\(Int(interval / 86400))d ago"
+    }
 
     enum State: String {
         case idle, busy, attention, error, done
