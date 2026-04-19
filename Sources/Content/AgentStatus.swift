@@ -151,21 +151,34 @@ final class AgentRegistry {
         )
     }
 
-    /// Start live progress ticking for working agents.
+    /// Start live progress ticking and activity text cycling for working agents.
     func startProgressSimulation() {
         progressTimer?.cancel()
         progressTimer = Task { @MainActor in
+            let activityPhrases: [String: [String]] = [
+                "email": ["Polling Gmail…", "214 seen · 2 new priority", "Archiving newsletters…", "Last poll 12s ago", "Drafting reply…"],
+                "meeting": ["Pulling Linear tickets…", "Scanning calendar…", "Drafting agenda §2…", "Linking Notion docs…", "Formatting prep notes…"],
+                "memory": ["Embedding batch 14/18…", "326 → 304 in queue", "Indexing email threads…", "Ollama latency 38ms", "Compacting vectors…"],
+            ]
+            var tick = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(3))
+                tick += 1
                 for agent in agents where agent.state == .busy {
+                    // Tick progress
                     if let p = agent.progress, p < 1.0 {
-                        agent.progress = min(p + Double.random(in: 0.01...0.04), 1.0)
+                        agent.progress = min(p + Double.random(in: 0.01...0.03), 1.0)
                         if agent.progress! >= 1.0 {
                             agent.state = .done
                             agent.label = "Complete"
                             agent.progress = nil
                             pushNotification(agent: agent.agent, message: "Finished")
+                            continue
                         }
+                    }
+                    // Cycle activity text
+                    if let phrases = activityPhrases[agent.id] {
+                        agent.label = phrases[tick % phrases.count]
                     }
                 }
             }

@@ -18,6 +18,9 @@ struct NotchRootView: View {
 
     @State private var dropTargeted = false
     @State private var dropFlash = false
+    @State private var showAskInput = false
+    @State private var askText = ""
+    @State private var askResponse: String?
 
     private let cornerRadius: CGFloat = 22
 
@@ -137,16 +140,24 @@ struct NotchRootView: View {
                 statusSummary
                 Spacer()
 
-                HStack(spacing: 4) {
-                    Text("+")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    Text("Ask")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        showAskInput.toggle()
+                        if !showAskInput { askText = ""; askResponse = nil }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(showAskInput ? "×" : "+")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        Text("Ask")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    }
+                    .foregroundStyle(Hekla.cream)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(showAskInput ? Hekla.orange.opacity(0.3) : Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
                 }
-                .foregroundStyle(Hekla.cream)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Hekla.cardHi, in: RoundedRectangle(cornerRadius: 4))
+                .buttonStyle(.plain)
 
                 Text("⌘Space")
                     .font(.system(size: 8, weight: .medium, design: .monospaced))
@@ -158,6 +169,14 @@ struct NotchRootView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
+
+            // Inline ask
+            if showAskInput {
+                inlineAskView
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
 
             // Smart stacking: active agents on top, idle/done below
             let active = registry.agents.filter { $0.state == .busy || $0.state == .attention || $0.state == .error }
@@ -258,6 +277,71 @@ struct NotchRootView: View {
 
             Spacer(minLength: 0)
         }
+    }
+
+    // MARK: - Inline ask
+
+    private var inlineAskView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Hekla.dim)
+
+                TextField("Ask HEKLA anything…", text: $askText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Hekla.cream)
+                    .onSubmit { submitAsk() }
+
+                if !askText.isEmpty {
+                    Button {
+                        submitAsk()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Hekla.orange)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Hekla.card)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Hekla.cardHi, lineWidth: 0.5)))
+
+            if let response = askResponse {
+                HStack(alignment: .top, spacing: 6) {
+                    Circle().fill(Hekla.orange).frame(width: 4, height: 4).padding(.top, 4)
+                    Text(response)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Hekla.body)
+                        .lineLimit(3)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Hekla.card))
+                .transition(.opacity.combined(with: .offset(y: -4)))
+            }
+        }
+    }
+
+    private func submitAsk() {
+        guard !askText.isEmpty else { return }
+        let question = askText
+        askText = ""
+        // Simulate a response
+        let responses = [
+            "Thursday 18:40 out, back Sunday. Hotel still unbooked.",
+            "Acme renewal at 14:30. §4 is the sticking point — they want 2× ACV cap.",
+            "326 items in the embedding queue. Should clear in ~4 minutes.",
+            "Last email from Peder was at 09:14 about Thursday dinner.",
+            "3 meetings today. The Acme one at 14:30 is the one that matters.",
+        ]
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            askResponse = responses[abs(question.hashValue) % responses.count]
+        }
+        AgentRegistry.shared.pushNotification(agent: "Chat", message: "Answered: \(question)", state: .done)
     }
 
     // MARK: - Shared
